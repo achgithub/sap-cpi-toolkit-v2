@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/base64"
 	"net/http"
 	"time"
 
@@ -314,6 +315,35 @@ func (h *Handler) sapClientForInstance(r *http.Request, instanceID string) (*sap
 		cfg.RateRead = *rateRead
 	}
 	return h.sapPool.Get(cfg), nil
+}
+
+// getBasicAuthHeader decrypts the instance API secret server-side and returns
+// the computed Basic auth header value so the secret never touches the browser.
+func (h *Handler) getBasicAuthHeader(w http.ResponseWriter, r *http.Request) {
+	iid := r.PathValue("iid")
+	var clientID, secretEnc string
+	err := h.pool.QueryRow(r.Context(),
+		`SELECT client_id, client_secret_enc FROM instances WHERE id=$1 AND project_id=$2`,
+		iid, r.PathValue("id"),
+	).Scan(&clientID, &secretEnc)
+	if err != nil {
+		if isNotFound(err) {
+			apiError(w, 404, "instance not found")
+		} else {
+			apiError(w, 500, "internal error")
+		}
+		return
+	}
+	secret, err := crypto.Decrypt(h.encKey, secretEnc)
+	if err != nil {
+		apiError(w, 500, "decrypt error")
+		return
+	}
+	encoded := base64.StdEncoding.EncodeToString([]byte(clientID + ":" + secret))
+	jsonResp(w, 200, map[string]string{
+		"client_id": clientID,
+		"header":    "Basic " + encoded,
+	})
 }
 
 func validSystemType(t string) bool {

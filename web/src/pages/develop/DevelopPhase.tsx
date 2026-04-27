@@ -4,7 +4,6 @@ const DEVELOP_NAV = [
   { id: 'map-editor',    label: 'XSLT Map Editor',  icon: 'map-2'               },
   { id: 'groovy',        label: 'Groovy IDE',        icon: 'source-code'         },
   { id: 'iflow-scaffold',label: 'iFlow Scaffold',    icon: 'puzzle'              },
-  { id: 'keys-certs',    label: 'Key / Cert Tools',  icon: 'key'                 },
   { id: 'tech-spec',     label: 'Tech Spec',         icon: 'document-text'       },
 ]
 
@@ -25,7 +24,6 @@ export default function DevelopPhase() {
           {id === 'map-editor'     && <Placeholder title="XSLT Map Editor"   description="XSD-aware map editor. Source and target XSDs pulled from the project XSD library. Coming in Step 3." />}
           {id === 'groovy'         && <Placeholder title="Groovy IDE"         description="Monaco-based editor with server-side linting and execution. Migrating from V1 in Step 2." />}
           {id === 'iflow-scaffold' && <Placeholder title="iFlow Scaffold"     description="Generate iFlow packages referencing project XSDs, maps, and scripts. Migrating and enhancing from V1 in Step 2." />}
-          {id === 'keys-certs'     && <Placeholder title="Key / Cert Tools"   description="PGP, SSH, and certificate generation. Ephemeral — download only, never stored. Migrating from V1 in Step 2." />}
           {id === 'tech-spec'      && <Placeholder title="Tech Spec Generation" description="Export interface diagram + metadata to a structured Word/PDF template. POC pending." />}
         </>
       )}

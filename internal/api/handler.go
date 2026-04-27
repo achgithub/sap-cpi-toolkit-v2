@@ -42,11 +42,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /projects/{id}/sub-projects/{spid}",   h.deleteSubProject)
 
 	// Instances
-	mux.HandleFunc("GET /projects/{id}/instances",           h.listInstances)
-	mux.HandleFunc("POST /projects/{id}/instances",          h.createInstance)
-	mux.HandleFunc("GET /projects/{id}/instances/{iid}",     h.getInstance)
-	mux.HandleFunc("PUT /projects/{id}/instances/{iid}",     h.updateInstance)
-	mux.HandleFunc("DELETE /projects/{id}/instances/{iid}",  h.deleteInstance)
+	mux.HandleFunc("GET /projects/{id}/instances",                       h.listInstances)
+	mux.HandleFunc("POST /projects/{id}/instances",                      h.createInstance)
+	mux.HandleFunc("GET /projects/{id}/instances/{iid}",                 h.getInstance)
+	mux.HandleFunc("PUT /projects/{id}/instances/{iid}",                 h.updateInstance)
+	mux.HandleFunc("DELETE /projects/{id}/instances/{iid}",              h.deleteInstance)
+	mux.HandleFunc("GET /projects/{id}/instances/{iid}/basic-auth",      h.getBasicAuthHeader)
 
 	// Monitoring — messages
 	mux.HandleFunc("GET /monitoring/{iid}/messages",             h.listMessages)
