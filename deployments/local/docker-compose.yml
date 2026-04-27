@@ -13,6 +13,7 @@ services:
       DEPLOYMENT_ENV: ${DEPLOYMENT_ENV:-local}
       AUTH_BYPASS_ENABLED: ${AUTH_BYPASS_ENABLED:-true}
       API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:8080}
+      GROOVY_INTERNAL_URL: ${GROOVY_INTERNAL_URL:-http://groovy-runner:8082}
       IAS_CLIENT_ID: ${IAS_CLIENT_ID:-}
       IAS_CLIENT_SECRET: ${IAS_CLIENT_SECRET:-}
       IAS_TENANT_URL: ${IAS_TENANT_URL:-}
@@ -35,6 +36,17 @@ services:
       postgres:
         condition: service_healthy
     mem_limit: 256m
+    restart: unless-stopped
+
+  groovy-runner:
+    build:
+      context: ../../groovy-runner
+      dockerfile: Dockerfile
+    expose:
+      - "8082"
+    environment:
+      PORT: ${GROOVY_PORT:-8082}
+    mem_limit: 512m
     restart: unless-stopped
 
   postgres:

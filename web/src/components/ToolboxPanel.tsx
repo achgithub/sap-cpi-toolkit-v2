@@ -13,7 +13,7 @@ interface Tool {
 
 const TOOLS: Tool[] = [
   { id: 'formatter',    icon: 'syntax',           name: 'Formatter',             description: 'XML & JSON formatting',      image: 'api',          available: true  },
-  { id: 'groovy',       icon: 'source-code',      name: 'Groovy IDE + Runner',   description: 'Script editor & execution',  image: 'groovy-runner',available: false },
+  { id: 'groovy',       icon: 'source-code',      name: 'Groovy IDE + Runner',   description: 'Script editor & execution',  image: 'groovy-runner',available: true  },
   { id: 'sftp',         icon: 'upload-to-cloud',  name: 'SFTP Server',           description: 'SFTP simulator',             image: 'sftp-adapter', available: false },
   { id: 'http-client',  icon: 'internet-browser', name: 'HTTP Client',           description: 'Test HTTP endpoints',        image: 'http-tools',   available: false },
   { id: 'mock-server',  icon: 'simulate',         name: 'HTTP Mock Server',      description: 'Intercept & respond',        image: 'http-tools',   available: false },

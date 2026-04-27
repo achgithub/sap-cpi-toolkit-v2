@@ -19,6 +19,7 @@ import { WorkspaceProvider } from './context/WorkspaceContext'
 import { Dialog, Bar, Button as Btn } from '@ui5/webcomponents-react'
 import Formatter from './tools/Formatter'
 import Security from './tools/Security'
+import GroovyIDE from './tools/GroovyIDE'
 
 type Phase = 'design' | 'develop' | 'test' | 'monitoring'
 const PHASES: Phase[] = ['design', 'develop', 'test', 'monitoring']
@@ -112,6 +113,22 @@ export default function App() {
         onClose={closeTool}
       >
         <Formatter />
+        <Bar slot="footer">
+          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
+            {maximized ? 'Restore' : 'Maximise'}
+          </Btn>
+          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
+        </Bar>
+      </Dialog>
+
+      <Dialog
+        open={activeTool === 'groovy'}
+        headerText="Groovy IDE"
+        stretch={maximized}
+        style={maximized ? undefined : { width: '95vw', height: '95vh' }}
+        onClose={closeTool}
+      >
+        <GroovyIDE />
         <Bar slot="footer">
           <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
             {maximized ? 'Restore' : 'Maximise'}
