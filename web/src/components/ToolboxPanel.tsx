@@ -18,8 +18,8 @@ const TOOLS: Tool[] = [
   { id: 'http-client',  icon: 'internet-browser', name: 'HTTP Client',           description: 'Test HTTP endpoints',        image: 'http-tools',   available: false },
   { id: 'mock-server',  icon: 'simulate',         name: 'HTTP Mock Server',      description: 'Intercept & respond',        image: 'http-tools',   available: false },
   { id: 'edi',          icon: 'documents',        name: 'EDI Tools',             description: 'EDIFACT & ANSI X12',         image: 'api',          available: false },
-  { id: 'keygen',       icon: 'key',              name: 'Key / Cert Generator',  description: 'PGP, SSH, certificates',     image: 'api',          available: false },
-  { id: 'auth-header',  icon: 'locked',           name: 'Auth Header Generator', description: 'Basic, Bearer, OAuth',       image: 'api',          available: false },
+  { id: 'keygen',       icon: 'key',              name: 'Key / Cert Generator',  description: 'PGP, SSH, certificates',     image: 'api',          available: true  },
+  { id: 'auth-header',  icon: 'locked',           name: 'Auth Header Generator', description: 'Basic, Bearer, Custom',      image: 'api',          available: true  },
 ]
 
 interface Props {

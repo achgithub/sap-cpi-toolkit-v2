@@ -64,6 +64,11 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /projects/{id}/members",         h.createMember)
 	mux.HandleFunc("PUT /projects/{id}/members/{mid}",    h.updateMember)
 	mux.HandleFunc("DELETE /projects/{id}/members/{mid}", h.deleteMember)
+
+	// Keygen (stateless — no DB required)
+	mux.HandleFunc("POST /keygen/pgp",  h.generatePGP)
+	mux.HandleFunc("POST /keygen/ssh",  h.generateSSH)
+	mux.HandleFunc("POST /keygen/cert", h.generateCert)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

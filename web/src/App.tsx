@@ -18,6 +18,8 @@ import ContextBar from './components/ContextBar'
 import { WorkspaceProvider } from './context/WorkspaceContext'
 import { Dialog, Bar, Button as Btn } from '@ui5/webcomponents-react'
 import Formatter from './tools/Formatter'
+import AuthHeaderGen from './tools/AuthHeaderGen'
+import KeyCertGen from './tools/KeyCertGen'
 
 type Phase = 'design' | 'develop' | 'test' | 'monitoring'
 const PHASES: Phase[] = ['design', 'develop', 'test', 'monitoring']
@@ -112,12 +114,39 @@ export default function App() {
       >
         <Formatter />
         <Bar slot="footer">
-          <Btn
-            slot="startContent"
-            design="Transparent"
-            icon={maximized ? 'exit-full-screen' : 'full-screen'}
-            onClick={() => setMaximized(m => !m)}
-          >
+          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
+            {maximized ? 'Restore' : 'Maximise'}
+          </Btn>
+          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
+        </Bar>
+      </Dialog>
+
+      <Dialog
+        open={activeTool === 'auth-header'}
+        headerText="Auth Header Generator"
+        stretch={maximized}
+        style={maximized ? undefined : { width: '60vw', height: '80vh' }}
+        onClose={closeTool}
+      >
+        <AuthHeaderGen />
+        <Bar slot="footer">
+          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
+            {maximized ? 'Restore' : 'Maximise'}
+          </Btn>
+          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
+        </Bar>
+      </Dialog>
+
+      <Dialog
+        open={activeTool === 'keygen'}
+        headerText="Key / Cert Generator"
+        stretch={maximized}
+        style={maximized ? undefined : { width: '70vw', height: '85vh' }}
+        onClose={closeTool}
+      >
+        <KeyCertGen />
+        <Bar slot="footer">
+          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
             {maximized ? 'Restore' : 'Maximise'}
           </Btn>
           <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
