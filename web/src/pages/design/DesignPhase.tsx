@@ -164,7 +164,6 @@ function ProjectsSection() {
 const DESIGN_NAV = [
   { id: 'projects', label: 'Projects',          icon: 'business-objects-experience' },
   { id: 'diagram',  label: 'Interface Diagram', icon: 'org-chart'                   },
-  { id: 'xsd',      label: 'XSD Library',       icon: 'documents'                   },
 ]
 
 function PhasePlaceholder({ title, description }: { title: string; description: string }) {
@@ -183,7 +182,6 @@ export default function DesignPhase() {
         <>
           {id === 'projects' && <ProjectsSection />}
           {id === 'diagram'  && <PhasePlaceholder title="Interface Diagram" description="Freeform block diagram builder. POC complete in V1 — full project-linked build coming in Step 7." />}
-          {id === 'xsd'      && <PhasePlaceholder title="XSD Library" description="Upload, validate, and associate source & target XSDs to sub-projects. Coming in Step 3." />}
         </>
       )}
     </PhaseLayout>

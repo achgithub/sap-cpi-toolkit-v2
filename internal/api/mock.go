@@ -243,14 +243,16 @@ func (h *Handler) setMockCert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Revert to auto-generated cert.
-	h.pool.Exec(r.Context(), `
-		INSERT INTO mock_server_config (key, value) VALUES ('cert_mode','auto')
-		ON CONFLICT (key) DO UPDATE SET value = 'auto'`) //nolint:errcheck
-	// Regenerate so the response reflects the current cert.
-	if h.certHolder != nil {
-		bundle, err := GenerateSelfSignedCert("localhost", "127.0.0.1", "api")
-		if err == nil {
+	// Revert to auto-generated cert — generate a new one and persist it.
+	upsert := func(key, val string) {
+		h.pool.Exec(r.Context(), `INSERT INTO mock_server_config (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, key, val) //nolint:errcheck
+	}
+	upsert("cert_mode", "auto")
+	bundle, err := GenerateSelfSignedCert("localhost", "127.0.0.1", "api", "host.docker.internal")
+	if err == nil {
+		upsert("auto_cert_pem", string(bundle.CertPEM))
+		upsert("auto_key_pem",  string(bundle.KeyPEM))
+		if h.certHolder != nil {
 			h.certHolder.Set(bundle)
 		}
 	}

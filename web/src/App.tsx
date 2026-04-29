@@ -20,6 +20,8 @@ import Security from './tools/Security'
 import GroovyIDE from './tools/GroovyIDE'
 import HttpClient from './tools/HttpClient'
 import AssetLibrary from './tools/AssetLibrary'
+import CloudConnector from './tools/CloudConnector'
+import EDITools from './tools/EDITools'
 import MockServer from './tools/MockServer'
 import SFTPServer from './tools/SFTPServer'
 
@@ -245,6 +247,38 @@ export default function App() {
         onClose={closeTool}
       >
         <HttpClient />
+        <Bar slot="footer">
+          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
+            {maximized ? 'Restore' : 'Maximise'}
+          </Btn>
+          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
+        </Bar>
+      </Dialog>
+
+      <Dialog
+        open={activeTool === 'cloud-connector'}
+        headerText="Cloud Connector"
+        stretch={maximized}
+        style={maximized ? undefined : { width: '80vw', height: '90vh' }}
+        onClose={closeTool}
+      >
+        <CloudConnector />
+        <Bar slot="footer">
+          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
+            {maximized ? 'Restore' : 'Maximise'}
+          </Btn>
+          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
+        </Bar>
+      </Dialog>
+
+      <Dialog
+        open={activeTool === 'edi'}
+        headerText="EDI Tools"
+        stretch={maximized}
+        style={maximized ? undefined : { width: '90vw', height: '90vh' }}
+        onClose={closeTool}
+      >
+        <EDITools />
         <Bar slot="footer">
           <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
             {maximized ? 'Restore' : 'Maximise'}

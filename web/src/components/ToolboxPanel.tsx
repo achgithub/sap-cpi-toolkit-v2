@@ -1,7 +1,7 @@
 import { Button, Icon } from '@ui5/webcomponents-react'
 import { useClipboard, type ClipboardEntry } from '../context/WorkspaceContext'
 
-export type ToolID = 'formatter' | 'groovy' | 'sftp' | 'http-client' | 'mock-server' | 'edi' | 'security' | 'assets'
+export type ToolID = 'formatter' | 'groovy' | 'sftp' | 'http-client' | 'mock-server' | 'edi' | 'security' | 'assets' | 'cloud-connector'
 
 interface Tool {
   id: ToolID
@@ -19,8 +19,9 @@ const TOOLS: Tool[] = [
   { id: 'sftp',         icon: 'upload-to-cloud',  name: 'SFTP Server',           description: 'SFTP simulator',                image: 'sftp-server',   available: true  },
   { id: 'http-client',  icon: 'internet-browser', name: 'HTTP Client',           description: 'Test HTTP endpoints',           image: 'http-tools',    available: true  },
   { id: 'mock-server',  icon: 'simulate',         name: 'HTTP Mock Server',      description: 'Intercept & respond',           image: 'http-tools',    available: true  },
-  { id: 'edi',          icon: 'documents',        name: 'EDI Tools',             description: 'EDIFACT & ANSI X12',            image: 'api',           available: false },
-  { id: 'security',     icon: 'locked',           name: 'Security',              description: 'Auth headers, PGP, SSH, certs', image: 'api',           available: true  },
+  { id: 'edi',          icon: 'documents',        name: 'EDI Tools',             description: 'EDIFACT & ANSI X12',            image: 'api',           available: true  },
+  { id: 'security',         icon: 'locked',           name: 'Security',              description: 'Auth headers, PGP, SSH, certs', image: 'api',           available: true  },
+  { id: 'cloud-connector', icon: 'cloud',            name: 'Cloud Connector',       description: 'SAP CC setup & status',         image: 'api',           available: true  },
 ]
 
 function relTime(ts: number): string {

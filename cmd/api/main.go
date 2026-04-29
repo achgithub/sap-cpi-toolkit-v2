@@ -69,28 +69,62 @@ func main() {
 	sched := api.NewScheduler(ctx, pool, log)
 	handler := api.New(pool, log, encKey, sapPool).WithScheduler(sched)
 
-	// Generate self-signed fallback cert, then check DB for a saved custom cert.
+	// Resolve TLS certificate for the mock server.
+	// Priority: custom cert (if set) → persisted auto cert → generate new (first boot only).
 	mockPort := envOr("MOCK_TLS_PORT", "8444")
-	autoBundle, err := api.GenerateSelfSignedCert("localhost", "127.0.0.1", "api")
-	if err != nil {
-		log.Error("failed to generate mock TLS cert", "error", err)
-		os.Exit(1)
-	}
-	certHolder := api.NewCertHolder(autoBundle)
 
-	// Load persisted cert config (custom cert survives restarts).
-	var certMode, savedCertPEM, savedKeyPEM string
-	pool.QueryRow(ctx, `SELECT value FROM mock_server_config WHERE key='cert_mode'`).Scan(&certMode)         //nolint:errcheck
-	pool.QueryRow(ctx, `SELECT value FROM mock_server_config WHERE key='custom_cert_pem'`).Scan(&savedCertPEM) //nolint:errcheck
-	pool.QueryRow(ctx, `SELECT value FROM mock_server_config WHERE key='custom_key_pem'`).Scan(&savedKeyPEM)   //nolint:errcheck
-	if certMode == "custom" && savedCertPEM != "" && savedKeyPEM != "" {
-		if bundle, err := api.ParseCustomCert([]byte(savedCertPEM), []byte(savedKeyPEM)); err == nil {
-			certHolder.Set(bundle)
-			log.Info("mock server using custom certificate")
-		} else {
-			log.Warn("saved custom cert invalid, falling back to auto", "error", err)
+	upsertConfig := func(key, val string) {
+		pool.Exec(ctx, `INSERT INTO mock_server_config (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, key, val) //nolint:errcheck
+	}
+	readConfig := func(key string) string {
+		var v string
+		pool.QueryRow(ctx, `SELECT value FROM mock_server_config WHERE key=$1`, key).Scan(&v) //nolint:errcheck
+		return v
+	}
+
+	var startBundle *api.TLSBundle
+	certMode := readConfig("cert_mode")
+
+	if certMode == "custom" {
+		// Custom cert — load from DB
+		certPEM := readConfig("custom_cert_pem")
+		keyPEM  := readConfig("custom_key_pem")
+		if certPEM != "" && keyPEM != "" {
+			if b, err := api.ParseCustomCert([]byte(certPEM), []byte(keyPEM)); err == nil {
+				startBundle = b
+				log.Info("mock server using custom certificate")
+			} else {
+				log.Warn("saved custom cert invalid, falling back to auto", "error", err)
+			}
 		}
 	}
+
+	if startBundle == nil {
+		// Auto cert — try to load persisted cert so CC trust survives restarts
+		autoCertPEM := readConfig("auto_cert_pem")
+		autoKeyPEM  := readConfig("auto_key_pem")
+		if autoCertPEM != "" && autoKeyPEM != "" {
+			if b, err := api.ParseCustomCert([]byte(autoCertPEM), []byte(autoKeyPEM)); err == nil {
+				startBundle = b
+				log.Info("mock server using persisted auto certificate")
+			}
+		}
+	}
+
+	if startBundle == nil {
+		// First boot — generate and persist so it's stable from now on
+		b, err := api.GenerateSelfSignedCert("localhost", "127.0.0.1", "api", "host.docker.internal")
+		if err != nil {
+			log.Error("failed to generate mock TLS cert", "error", err)
+			os.Exit(1)
+		}
+		startBundle = b
+		upsertConfig("auto_cert_pem", string(b.CertPEM))
+		upsertConfig("auto_key_pem",  string(b.KeyPEM))
+		log.Info("mock server generated new self-signed certificate (import once into Cloud Connector)")
+	}
+
+	certHolder := api.NewCertHolder(startBundle)
 
 	handler.WithMockTLS(certHolder, mockPort)
 	handler.Register(mux)

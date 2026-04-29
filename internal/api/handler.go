@@ -125,6 +125,16 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /assets/{aid}",    h.updateAsset)
 	mux.HandleFunc("DELETE /assets/{aid}", h.deleteAsset)
 
+	// Cloud Connector
+	mux.HandleFunc("GET /cloud-connector/status", h.cloudConnectorStatus)
+
+	// EDI tools (stateless)
+	mux.HandleFunc("POST /edi/parse",           h.ediParse)
+	mux.HandleFunc("POST /edi/to-xml",          h.ediToXML)
+	mux.HandleFunc("POST /edi/to-semantic-xml", h.ediToSemanticXML)
+	mux.HandleFunc("POST /edi/from-xml",        h.ediFromXML)
+	mux.HandleFunc("POST /edi/generate",        h.ediGenerate)
+
 	// Test packs
 	mux.HandleFunc("GET /test-packs",                          h.listTestPacks)
 	mux.HandleFunc("POST /test-packs",                         h.createTestPack)

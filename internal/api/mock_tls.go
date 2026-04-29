@@ -19,10 +19,11 @@ import (
 
 // ── TLS Bundle ────────────────────────────────────────────────────────────────
 
-// TLSBundle holds a parsed certificate and its PEM encoding for download.
+// TLSBundle holds a parsed certificate and its PEM encodings.
 type TLSBundle struct {
 	Certificate tls.Certificate
 	CertPEM     []byte
+	KeyPEM      []byte // kept for DB persistence; never sent to clients
 	Info        CertInfo
 }
 
@@ -83,7 +84,7 @@ func GenerateSelfSignedCert(hosts ...string) (*TLSBundle, error) {
 	}
 
 	info, _ := parseCertInfo(certPEM)
-	return &TLSBundle{Certificate: tlsCert, CertPEM: certPEM, Info: info}, nil
+	return &TLSBundle{Certificate: tlsCert, CertPEM: certPEM, KeyPEM: keyPEM, Info: info}, nil
 }
 
 // ParseCustomCert validates and parses a user-supplied cert+key PEM pair.
@@ -96,7 +97,7 @@ func ParseCustomCert(certPEM, keyPEM []byte) (*TLSBundle, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &TLSBundle{Certificate: tlsCert, CertPEM: certPEM, Info: info}, nil
+	return &TLSBundle{Certificate: tlsCert, CertPEM: certPEM, KeyPEM: keyPEM, Info: info}, nil
 }
 
 // parseCertInfo extracts human-readable metadata from a PEM certificate.
