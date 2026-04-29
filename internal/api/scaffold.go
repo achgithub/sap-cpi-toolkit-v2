@@ -30,8 +30,10 @@ type ScaffoldRequest struct {
 	ReceiverAdapter string `json:"receiver_adapter"` // HTTP | SFTP
 	IncludeGroovy   bool   `json:"include_groovy"`
 	GroovyName      string `json:"groovy_name"`
+	GroovyContent   string `json:"groovy_content"` // if set, embedded instead of stub
 	IncludeXSLT     bool   `json:"include_xslt"`
 	XSLTName        string `json:"xslt_name"`
+	XSLTContent     string `json:"xslt_content"` // if set, embedded instead of stub
 	// Adapter properties
 	HTTPSUrlPath              string `json:"https_url_path"`
 	SFTPSenderHost            string `json:"sftp_sender_host"`
@@ -429,10 +431,18 @@ func generateScaffoldZIP(req ScaffoldRequest) ([]byte, error) {
 	}
 
 	if req.IncludeGroovy {
-		files["src/main/resources/script/"+groovyName+".groovy"] = scaffoldGroovyStub(groovyName)
+		content := req.GroovyContent
+		if content == "" {
+			content = scaffoldGroovyStub(groovyName)
+		}
+		files["src/main/resources/script/"+groovyName+".groovy"] = content
 	}
 	if req.IncludeXSLT {
-		files["src/main/resources/mapping/"+xsltName+".xsl"] = scaffoldXSLTStub()
+		content := req.XSLTContent
+		if content == "" {
+			content = scaffoldXSLTStub()
+		}
+		files["src/main/resources/mapping/"+xsltName+".xsl"] = content
 	}
 
 	files["src/main/resources/scenarioflows/integrationflow/"+safeIFlowName+".iflw"] =

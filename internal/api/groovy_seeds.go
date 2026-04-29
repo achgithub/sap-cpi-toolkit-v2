@@ -16,7 +16,7 @@ func SeedGroovyScripts(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger
 		log.Error("groovy seed: count check failed", "error", err)
 		return
 	}
-	if count >= len(groovySeeds) {
+	if count >= len(groovySeeds) { //nolint:gocritic
 		return
 	}
 	log.Info("seeding built-in Groovy scripts", "count", len(groovySeeds))
@@ -841,6 +841,59 @@ def Message processData(Message message) {
     message.setBody(writer.toString())
     message.setProperty("TDLineCount",    chunks.size().toString())
     message.setProperty("OriginalLength", longText.length().toString())
+    return message
+}`,
+	},
+	{
+		name: "Quantity Incrementer — Payload Mutation Demo",
+		meta: groovyMeta{
+			Description: "Parses XML body, finds all <Quantity> elements, increments each value by 1, writes the mutated XML back as the message body. Adds X-Processed-By and X-Quantity-Incremented headers. Used in the end-to-end toolkit test journey (HTTP→HTTP Groovy iFlow scenario).",
+			Complexity:  "Beginner",
+			Tags:        []string{"Transform", "XML", "Demo"},
+			SampleBody: `<?xml version="1.0" encoding="UTF-8"?>
+<Order>
+  <OrderNumber>ORD-001</OrderNumber>
+  <Items>
+    <Item>
+      <ProductID>WIDGET-A</ProductID>
+      <Quantity>5</Quantity>
+      <UnitPrice>12.99</UnitPrice>
+    </Item>
+    <Item>
+      <ProductID>GADGET-B</ProductID>
+      <Quantity>2</Quantity>
+      <UnitPrice>49.95</UnitPrice>
+    </Item>
+  </Items>
+</Order>`,
+			SampleHdrs: "Content-Type: application/xml",
+			Builtin:    true,
+		},
+		body: `import com.sap.gateway.ip.core.customdev.util.Message
+import groovy.xml.XmlUtil
+
+def Message processData(Message message) {
+    def body = message.getBody(String.class)
+
+    // Parse XML, increment every <Quantity> element
+    def root = new XmlSlurper(false, false).parseText(body)
+    def incremented = 0
+    root.'**'.findAll { it.name() == 'Quantity' }.each { node ->
+        def val = node.text().trim()
+        if (val.isInteger()) {
+            node.replaceBody((val.toInteger() + 1).toString())
+            incremented++
+        }
+    }
+
+    // Write mutated XML back as message body
+    message.setBody(XmlUtil.serialize(root))
+
+    // Trace headers
+    message.setHeader('X-Processed-By',          'CPI-Toolkit-Groovy')
+    message.setHeader('X-Quantity-Incremented',   incremented.toString())
+    message.setHeader('X-Processed-At',           new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC')))
+
     return message
 }`,
 	},

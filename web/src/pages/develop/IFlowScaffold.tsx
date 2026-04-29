@@ -5,6 +5,7 @@ import {
 } from '@ui5/webcomponents-react'
 import type { InputDomRef } from '@ui5/webcomponents-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
+import AssetBrowser from '../../components/AssetBrowser'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -114,8 +115,10 @@ interface FormState {
   receiverAdapter: string
   includeGroovy:   boolean
   groovyName:      string
+  groovyContent:   string
   includeXSLT:     boolean
   xsltName:        string
+  xsltContent:     string
   httpsUrlPath:             string
   sftpSenderHost:           string
   sftpSenderCredential:     string
@@ -137,6 +140,7 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
   const [checking,   setChecking]   = useState(false)
   const [error,      setError]      = useState('')
   const [uploadMsg,  setUploadMsg]  = useState('')
+  const [browseFor,  setBrowseFor]  = useState<'groovy'|'xslt'|null>(null)
   const [preflight,  setPreflight]  = useState<{
     package_id: string; package_exists: boolean
     iflow_id: string; iflow_exists: boolean
@@ -145,8 +149,8 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
   const [form, setForm] = useState<FormState>({
     name: '', iflowId: '', packageName: '', packageId: '',
     description: '', senderAdapter: 'HTTPS', receiverAdapter: 'HTTP',
-    includeGroovy: false, groovyName: 'script',
-    includeXSLT: false, xsltName: 'mapping',
+    includeGroovy: false, groovyName: 'script', groovyContent: '',
+    includeXSLT: false, xsltName: 'mapping', xsltContent: '',
     httpsUrlPath: 'ZZURLPATH',
     sftpSenderHost: 'ZZHOST', sftpSenderCredential: 'ZZCREDENTIALNAME', sftpSenderDirectory: 'ZZDIRECTORY',
     sftpSenderScheduleType: 'every_hours', sftpSenderScheduleValue: '1',
@@ -163,8 +167,8 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
     package_name: form.packageName, package_id: form.packageId,
     description: form.description,
     sender_adapter: form.senderAdapter, receiver_adapter: form.receiverAdapter,
-    include_groovy: form.includeGroovy, groovy_name: form.groovyName || 'script',
-    include_xslt: form.includeXSLT, xslt_name: form.xsltName || 'mapping',
+    include_groovy: form.includeGroovy, groovy_name: form.groovyName || 'script', groovy_content: form.groovyContent,
+    include_xslt: form.includeXSLT, xslt_name: form.xsltName || 'mapping', xslt_content: form.xsltContent,
     https_url_path: form.httpsUrlPath,
     sftp_sender_host: form.sftpSenderHost, sftp_sender_credential: form.sftpSenderCredential,
     sftp_sender_directory: form.sftpSenderDirectory,
@@ -392,37 +396,94 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
         </FormSection>
       )}
 
+      {/* Asset browser for Groovy / XSLT */}
+      <AssetBrowser
+        open={browseFor === 'groovy'}
+        filterType="groovy"
+        title="Load Groovy Script"
+        onSelect={(content) => { patch({ groovyContent: content }); setBrowseFor(null) }}
+        onClose={() => setBrowseFor(null)}
+      />
+      <AssetBrowser
+        open={browseFor === 'xslt'}
+        filterType="xslt"
+        title="Load XSLT Mapping"
+        onSelect={(content) => { patch({ xsltContent: content }); setBrowseFor(null) }}
+        onClose={() => setBrowseFor(null)}
+      />
+
       {/* Step 3: Flow Steps */}
       {step === 3 && (
-        <FormSection title="3 — Flow Steps" subtitle="Optional script and mapping stubs included in the ZIP">
+        <FormSection title="3 — Flow Steps" subtitle="Optional script and mapping files included in the ZIP">
           <LockedStep label="Exception Subprocess"
             description="Always included — catches unhandled errors and sets exception message as body." />
           <LockedStep label="Content Modifier — Set Standard Headers"
             description="Always included — sets SAP_ApplicationID with timestamp and exchange ID." />
 
           <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-              <CheckBox text="Include Groovy Script stub" checked={form.includeGroovy}
-                onChange={e => patch({ includeGroovy: (e.target as unknown as { checked: boolean }).checked })} />
+            {/* Groovy */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <CheckBox text="Include Groovy Script" checked={form.includeGroovy}
+                onChange={e => patch({ includeGroovy: (e.target as unknown as { checked: boolean }).checked, groovyContent: '' })} />
               {form.includeGroovy && (
-                <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem', paddingLeft: '1.75rem' }}>
-                  <Label>Filename:</Label>
-                  <Input value={form.groovyName} placeholder="script" style={{ width: '180px', fontFamily: 'monospace' }}
-                    onInput={e => patch({ groovyName: inp(e) })} />
-                  <span style={{ fontSize: '0.78rem', color: 'var(--sapContent_LabelColor)', fontFamily: 'monospace' }}>.groovy</span>
-                </FlexBox>
+                <div style={{ paddingLeft: '1.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem' }}>
+                    <Label>Filename:</Label>
+                    <Input value={form.groovyName} placeholder="script" style={{ width: '180px', fontFamily: 'monospace' }}
+                      onInput={e => patch({ groovyName: inp(e) })} />
+                    <span style={{ fontSize: '0.78rem', color: 'var(--sapContent_LabelColor)', fontFamily: 'monospace' }}>.groovy</span>
+                  </FlexBox>
+                  <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem' }}>
+                    <Button icon="open-folder" design="Transparent" onClick={() => setBrowseFor('groovy')}>
+                      Load from Asset Library
+                    </Button>
+                    {form.groovyContent ? (
+                      <span style={{ fontSize: '0.8rem', color: 'var(--sapPositiveColor)' }}>
+                        ✓ Script loaded ({form.groovyContent.split('\n').length} lines) — will be embedded in ZIP
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)' }}>
+                        No script loaded — a stub will be generated
+                      </span>
+                    )}
+                    {form.groovyContent && (
+                      <Button design="Transparent" icon="decline" onClick={() => patch({ groovyContent: '' })}>Clear</Button>
+                    )}
+                  </FlexBox>
+                </div>
               )}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-              <CheckBox text="Include XSLT Mapping stub" checked={form.includeXSLT}
-                onChange={e => patch({ includeXSLT: (e.target as unknown as { checked: boolean }).checked })} />
+
+            {/* XSLT */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <CheckBox text="Include XSLT Mapping" checked={form.includeXSLT}
+                onChange={e => patch({ includeXSLT: (e.target as unknown as { checked: boolean }).checked, xsltContent: '' })} />
               {form.includeXSLT && (
-                <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem', paddingLeft: '1.75rem' }}>
-                  <Label>Filename:</Label>
-                  <Input value={form.xsltName} placeholder="mapping" style={{ width: '180px', fontFamily: 'monospace' }}
-                    onInput={e => patch({ xsltName: inp(e) })} />
-                  <span style={{ fontSize: '0.78rem', color: 'var(--sapContent_LabelColor)', fontFamily: 'monospace' }}>.xsl</span>
-                </FlexBox>
+                <div style={{ paddingLeft: '1.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem' }}>
+                    <Label>Filename:</Label>
+                    <Input value={form.xsltName} placeholder="mapping" style={{ width: '180px', fontFamily: 'monospace' }}
+                      onInput={e => patch({ xsltName: inp(e) })} />
+                    <span style={{ fontSize: '0.78rem', color: 'var(--sapContent_LabelColor)', fontFamily: 'monospace' }}>.xsl</span>
+                  </FlexBox>
+                  <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem' }}>
+                    <Button icon="open-folder" design="Transparent" onClick={() => setBrowseFor('xslt')}>
+                      Load from Asset Library
+                    </Button>
+                    {form.xsltContent ? (
+                      <span style={{ fontSize: '0.8rem', color: 'var(--sapPositiveColor)' }}>
+                        ✓ Mapping loaded ({form.xsltContent.split('\n').length} lines) — will be embedded in ZIP
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)' }}>
+                        No mapping loaded — a stub will be generated
+                      </span>
+                    )}
+                    {form.xsltContent && (
+                      <Button design="Transparent" icon="decline" onClick={() => patch({ xsltContent: '' })}>Clear</Button>
+                    )}
+                  </FlexBox>
+                </div>
               )}
             </div>
           </div>
@@ -439,8 +500,8 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
             ['Description',  form.description || '—'],
             ['Sender',       form.senderAdapter],
             ['Receiver',     form.receiverAdapter],
-            ['Groovy stub',  form.includeGroovy ? (form.groovyName || 'script') + '.groovy' : 'No'],
-            ['XSLT stub',    form.includeXSLT   ? (form.xsltName   || 'mapping') + '.xsl'   : 'No'],
+            ['Groovy',  form.includeGroovy ? `${form.groovyName || 'script'}.groovy${form.groovyContent ? ' (from asset)' : ' (stub)'}` : 'No'],
+            ['XSLT',    form.includeXSLT   ? `${form.xsltName   || 'mapping'}.xsl${form.xsltContent   ? ' (from asset)' : ' (stub)'}` : 'No'],
           ]} />
 
           <div style={{ marginTop: '1.25rem' }}>
