@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from 'react'
+import { useClipboard, clipboardName } from '../context/WorkspaceContext'
+import SaveAssetDialog from '../components/SaveAssetDialog'
 import {
   TabContainer,
   Tab,
@@ -69,20 +71,30 @@ function field(label: string, children: ReactNode) {
   )
 }
 
-function ResultBlock({ label, value, filename }: { label: string; value: string; filename: string }) {
-  const [copied, setCopied] = useState(false)
-  function copy() {
-    copyToClipboard(value); setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+function ResultBlock({ label, value, filename, assetType = 'cert' }: {
+  label: string; value: string; filename: string; assetType?: string
+}) {
+  const [sent,      setSent]      = useState(false)
+  const [saveOpen,  setSaveOpen]  = useState(false)
+  const { pushClipboard } = useClipboard()
+
+  function copyAll() {
+    copyToClipboard(value)
+    pushClipboard({ name: clipboardName(label), content: value, source: 'Security' })
+    setSent(true); setTimeout(() => setSent(false), 2000)
   }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
         <Label style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)', flex: 1 }}>
           {label}
         </Label>
-        <Button icon={copied ? 'accept' : 'copy'} design="Transparent" onClick={copy}>
-          {copied ? 'Copied!' : 'Copy'}
+        <Button icon={sent ? 'accept' : 'copy'} design="Transparent" onClick={copyAll}>
+          {sent ? 'Copied!' : 'Copy clipboard'}
+        </Button>
+        <Button icon="save" design="Transparent" onClick={() => setSaveOpen(true)}>
+          Save asset
         </Button>
         <Button icon="download" design="Transparent" onClick={() => downloadText(filename, value)}>
           Download
@@ -90,6 +102,8 @@ function ResultBlock({ label, value, filename }: { label: string; value: string;
       </div>
       <TextArea value={value} readonly rows={8}
         style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }} />
+      <SaveAssetDialog open={saveOpen} content={value} defaultName={filename.replace(/\.[^.]+$/, '')}
+        defaultType={assetType} onClose={() => setSaveOpen(false)} onSaved={() => setSaveOpen(false)} />
     </div>
   )
 }
@@ -137,9 +151,13 @@ function AuthTab() {
     setError('')
   }
 
+  const { pushClipboard } = useClipboard()
+  const [saveHeaderOpen, setSaveHeaderOpen] = useState(false)
+
   function copy() {
-    copyToClipboard(header); setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    copyToClipboard(header)
+    pushClipboard({ name: clipboardName('Authorization header'), content: header, source: 'Security' })
+    setCopied(true); setTimeout(() => setCopied(false), 2000)
   }
 
   return (
@@ -229,10 +247,20 @@ function AuthTab() {
 
           {header && (
             <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem' }}>
-              <Button design="Default" onClick={copy}>
-                {copied ? '✓ Copied' : 'Copy full header'}
+              <Button icon={copied ? 'accept' : 'copy'} design="Transparent" onClick={copy}>
+                {copied ? '✓ Copied' : 'Copy clipboard'}
+              </Button>
+              <Button icon="save" design="Transparent" onClick={() => setSaveHeaderOpen(true)}>
+                Save asset
+              </Button>
+              <Button icon="download" design="Transparent" onClick={() => downloadText('auth-header.txt', header)}>
+                Download
               </Button>
             </FlexBox>
+          )}
+          {saveHeaderOpen && (
+            <SaveAssetDialog open content={header} defaultName="auth-header" defaultType="snippet"
+              onClose={() => setSaveHeaderOpen(false)} onSaved={() => setSaveHeaderOpen(false)} />
           )}
         </div>
       </Card>
@@ -286,7 +314,7 @@ function PGPTab() {
         <Button design="Emphasized" onClick={generate} disabled={!name || busy}>Generate PGP Keypair</Button>
       </BusyIndicator>
       {error && <span style={{ color: 'var(--sapErrorColor)', fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem' }}>{error}</span>}
-      {pubKey  && <ResultBlock label="Public Key"  value={pubKey}  filename="public.asc" />}
+      {pubKey  && <ResultBlock label="Public Key"  value={pubKey}  filename="public.asc"  assetType="cert" />}
       {privKey && <ResultBlock label="Private Key" value={privKey} filename="private.asc" />}
     </div>
   )

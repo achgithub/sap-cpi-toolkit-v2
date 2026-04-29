@@ -1,11 +1,15 @@
 import PhaseLayout from '../../components/PhaseLayout'
 import GroovyIDE from '../../tools/GroovyIDE'
+import IFlowScaffold from './IFlowScaffold'
+import XSDGenerator from '../../tools/XSDGenerator'
+import XSLTMapEditor from '../../tools/XSLTMapEditor'
 
 const DEVELOP_NAV = [
   { id: 'map-editor',    label: 'XSLT Map Editor',  icon: 'map-2'               },
+  { id: 'xsd-generator', label: 'XSD Generator',    icon: 'document-text'       },
   { id: 'groovy',        label: 'Groovy IDE',        icon: 'source-code'         },
   { id: 'iflow-scaffold',label: 'iFlow Scaffold',    icon: 'puzzle'              },
-  { id: 'tech-spec',     label: 'Tech Spec',         icon: 'document-text'       },
+  { id: 'tech-spec',     label: 'Tech Spec',         icon: 'bbyd-active-tasks'   },
 ]
 
 function Placeholder({ title, description }: { title: string; description: string }) {
@@ -22,9 +26,10 @@ export default function DevelopPhase() {
     <PhaseLayout storageKey="v2-develop" items={DEVELOP_NAV}>
       {(id) => (
         <>
-          {id === 'map-editor'     && <Placeholder title="XSLT Map Editor"   description="XSD-aware map editor. Source and target XSDs pulled from the project XSD library. Coming in Step 3." />}
+          {id === 'map-editor'     && <XSLTMapEditor />}
+          {id === 'xsd-generator'  && <XSDGenerator />}
           {id === 'groovy'         && <GroovyIDE />}
-          {id === 'iflow-scaffold' && <Placeholder title="iFlow Scaffold"     description="Generate iFlow packages referencing project XSDs, maps, and scripts. Migrating and enhancing from V1 in Step 2." />}
+          {id === 'iflow-scaffold' && <IFlowScaffold />}
           {id === 'tech-spec'      && <Placeholder title="Tech Spec Generation" description="Export interface diagram + metadata to a structured Word/PDF template. POC pending." />}
         </>
       )}

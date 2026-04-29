@@ -7,6 +7,8 @@ import {
   type ReactNode,
 } from 'react'
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 export interface Project {
   id: string
   name: string
@@ -43,6 +45,18 @@ export interface Instance {
   updated_at: string
 }
 
+export interface ClipboardEntry {
+  id: string
+  name: string
+  content: string
+  source: string
+  timestamp: number
+}
+
+const CLIPBOARD_MAX = 20
+
+// ── Context shape ─────────────────────────────────────────────────────────────
+
 interface WorkspaceContextValue {
   projects: Project[]
   projectsLoading: boolean
@@ -58,6 +72,11 @@ interface WorkspaceContextValue {
   refreshProjects: () => void
   refreshSubProjects: () => void
   refreshInstances: () => void
+  // clipboard
+  clipboard: ClipboardEntry[]
+  pushClipboard: (entry: Omit<ClipboardEntry, 'id' | 'timestamp'>) => void
+  promoteClipboard: (id: string) => void
+  clearClipboard: () => void
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)
@@ -72,15 +91,18 @@ async function apiFetch<T>(path: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
+// ── Provider ──────────────────────────────────────────────────────────────────
+
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const [projects,          setProjects]          = useState<Project[]>([])
-  const [projectsLoading,   setProjectsLoading]   = useState(true)
-  const [projectsError,     setProjectsError]     = useState<string | null>(null)
-  const [selectedProject,   setSelectedProject]   = useState<Project | null>(null)
-  const [subProjects,       setSubProjects]        = useState<SubProject[]>([])
-  const [selectedSubProject,setSelectedSubProject] = useState<SubProject | null>(null)
-  const [instances,         setInstances]          = useState<Instance[]>([])
-  const [selectedInstance,  setSelectedInstance]   = useState<Instance | null>(null)
+  const [projects,           setProjects]           = useState<Project[]>([])
+  const [projectsLoading,    setProjectsLoading]    = useState(true)
+  const [projectsError,      setProjectsError]      = useState<string | null>(null)
+  const [selectedProject,    setSelectedProject]    = useState<Project | null>(null)
+  const [subProjects,        setSubProjects]         = useState<SubProject[]>([])
+  const [selectedSubProject, setSelectedSubProject]  = useState<SubProject | null>(null)
+  const [instances,          setInstances]           = useState<Instance[]>([])
+  const [selectedInstance,   setSelectedInstance]    = useState<Instance | null>(null)
+  const [clipboard,          setClipboard]           = useState<ClipboardEntry[]>([])
 
   const loadProjects = useCallback(async () => {
     setProjectsLoading(true)
@@ -102,7 +124,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     try {
       const data = await apiFetch<SubProject[]>(`/projects/${projectId}/sub-projects`)
       setSubProjects(data)
-
       const savedId = localStorage.getItem(SEL_SUBPROJECT_KEY)
       const match = savedId ? data.find(sp => sp.id === savedId) ?? null : null
       setSelectedSubProject(match ?? null)
@@ -116,7 +137,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     try {
       const data = await apiFetch<Instance[]>(`/projects/${projectId}/instances`)
       setInstances(data)
-
       const savedId = localStorage.getItem(SEL_INSTANCE_KEY)
       const match = savedId ? data.find(i => i.id === savedId) ?? null : null
       setSelectedInstance(match ?? data[0] ?? null)
@@ -126,10 +146,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Load projects on mount
   useEffect(() => { loadProjects() }, [loadProjects])
 
-  // Load sub-projects + instances when selected project changes
   useEffect(() => {
     if (selectedProject) {
       loadSubProjects(selectedProject.id)
@@ -162,6 +180,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(SEL_INSTANCE_KEY, id)
   }, [instances])
 
+  const pushClipboard = useCallback((entry: Omit<ClipboardEntry, 'id' | 'timestamp'>) => {
+    setClipboard(prev => [
+      { ...entry, id: `cb-${Date.now()}-${Math.random().toString(36).slice(2)}`, timestamp: Date.now() },
+      ...prev,
+    ].slice(0, CLIPBOARD_MAX))
+  }, [])
+
+  const promoteClipboard = useCallback((id: string) => {
+    setClipboard(prev => {
+      const entry = prev.find(e => e.id === id)
+      if (!entry) return prev
+      return [entry, ...prev.filter(e => e.id !== id)]
+    })
+  }, [])
+
+  const clearClipboard = useCallback(() => setClipboard([]), [])
+
   return (
     <WorkspaceContext.Provider value={{
       projects, projectsLoading, projectsError,
@@ -172,14 +207,31 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       refreshProjects:    loadProjects,
       refreshSubProjects: () => { if (selectedProject) loadSubProjects(selectedProject.id) },
       refreshInstances:   () => { if (selectedProject) loadInstances(selectedProject.id) },
+      clipboard, pushClipboard, promoteClipboard, clearClipboard,
     }}>
       {children}
     </WorkspaceContext.Provider>
   )
 }
 
+// ── Hooks ─────────────────────────────────────────────────────────────────────
+
 export function useWorkspace(): WorkspaceContextValue {
   const ctx = useContext(WorkspaceContext)
   if (!ctx) throw new Error('useWorkspace must be used within WorkspaceProvider')
   return ctx
+}
+
+export function useClipboard() {
+  const { clipboard, pushClipboard, promoteClipboard, clearClipboard } = useWorkspace()
+  return { clipboard, pushClipboard, promoteClipboard, clearClipboard }
+}
+
+// ── Helpers exported for tools ────────────────────────────────────────────────
+
+export function clipboardName(prefix: string): string {
+  const d = new Date()
+  const hh = d.getHours().toString().padStart(2, '0')
+  const mm = d.getMinutes().toString().padStart(2, '0')
+  return `${prefix} · ${hh}:${mm}`
 }

@@ -1,7 +1,7 @@
+import { useState } from 'react'
 import {
   Button, Card, CardHeader, FlexBox, FlexBoxDirection,
-  FlexBoxJustifyContent, Label, MessageStrip, TextArea,
-  Toolbar, ToolbarSeparator, ToolbarSpacer,
+  Label, MessageStrip, TextArea, Toolbar, ToolbarSpacer,
 } from '@ui5/webcomponents-react'
 
 export interface EditorAction {
@@ -32,6 +32,11 @@ interface Props {
   loading?: boolean
   outputFilename?: string
   children?: React.ReactNode
+  canPaste?: boolean
+  onPasteInput?: () => void
+  onSendOutput?: () => void
+  onLoadAsset?: () => void
+  onSaveAsset?: () => void
 }
 
 export default function EditorPanel({
@@ -41,9 +46,18 @@ export default function EditorPanel({
   onInputChange, actions,
   samples = [], errors = [], warnings = [],
   loading = false, outputFilename, children,
+  canPaste, onPasteInput, onSendOutput,
+  onLoadAsset, onSaveAsset,
 }: Props) {
+  const [sent, setSent] = useState(false)
 
-  const handleDownload = () => {
+  function handleSend() {
+    onSendOutput?.()
+    setSent(true)
+    setTimeout(() => setSent(false), 1800)
+  }
+
+  function handleDownload() {
     if (!outputValue || !outputFilename) return
     const blob = new Blob([outputValue], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
@@ -65,6 +79,29 @@ export default function EditorPanel({
           <MessageStrip key={`w${i}`} design="Critical" hideCloseButton>{msg}</MessageStrip>
         ))}
 
+        {/* ── Input section ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: '2rem' }}>
+            <Label style={{ fontWeight: 600 }}>{inputLabel}</Label>
+            <div style={{ display: 'flex', gap: '0.25rem' }}>
+              <Button design="Transparent" icon="open-folder" disabled={!onLoadAsset} onClick={onLoadAsset}>
+                Load asset
+              </Button>
+              <Button design="Transparent" icon="paste" disabled={!canPaste} onClick={onPasteInput}>
+                Paste clipboard
+              </Button>
+            </div>
+          </div>
+          <TextArea
+            value={inputValue}
+            placeholder={inputPlaceholder}
+            rows={14}
+            style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
+            onInput={e => onInputChange((e.target as unknown as HTMLTextAreaElement).value)}
+          />
+        </div>
+
+        {/* ── Actions toolbar ── */}
         <Toolbar>
           {actions.map(a => (
             <Button
@@ -76,51 +113,40 @@ export default function EditorPanel({
               {loading && a.design === 'Emphasized' ? 'Working…' : a.label}
             </Button>
           ))}
-
-          {samples.length > 0 && (
-            <>
-              <ToolbarSeparator />
-              {samples.map(s => (
-                <Button key={s.label} design="Transparent" icon="example" onClick={() => onInputChange(s.content)}>
-                  {s.label}
-                </Button>
-              ))}
-            </>
-          )}
-
-          <ToolbarSpacer />
-          {outputFilename && outputValue && (
-            <Button design="Transparent" icon="download" onClick={handleDownload}>
-              {outputFilename}
+          {samples.length > 0 && samples.map(s => (
+            <Button key={s.label} design="Transparent" icon="example" onClick={() => onInputChange(s.content)}>
+              {s.label}
             </Button>
-          )}
+          ))}
+          <ToolbarSpacer />
         </Toolbar>
 
-        <FlexBox
-          direction={FlexBoxDirection.Row}
-          justifyContent={FlexBoxJustifyContent.SpaceBetween}
-          style={{ gap: '1rem' }}
-        >
-          <FlexBox direction={FlexBoxDirection.Column} style={{ flex: 1, gap: '0.25rem' }}>
-            <Label>{inputLabel}</Label>
-            <TextArea
-              value={inputValue}
-              placeholder={inputPlaceholder}
-              rows={22}
-              style={{ width: '100%', fontFamily: 'monospace' }}
-              onInput={e => onInputChange((e.target as unknown as HTMLTextAreaElement).value)}
-            />
-          </FlexBox>
-          <FlexBox direction={FlexBoxDirection.Column} style={{ flex: 1, gap: '0.25rem' }}>
-            <Label>{outputLabel}</Label>
-            <TextArea
-              value={outputValue}
-              rows={22}
-              readonly
-              style={{ width: '100%', fontFamily: 'monospace' }}
-            />
-          </FlexBox>
-        </FlexBox>
+        {/* ── Output section ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: '2rem' }}>
+            <Label style={{ fontWeight: 600 }}>{outputLabel}</Label>
+            <div style={{ display: 'flex', gap: '0.25rem' }}>
+              <Button design="Transparent" icon="save" disabled={!outputValue || !onSaveAsset} onClick={onSaveAsset}>
+                Save asset
+              </Button>
+              <Button design="Transparent" icon={sent ? 'accept' : 'copy'} disabled={!outputValue || !onSendOutput}
+                onClick={handleSend}>
+                {sent ? 'Sent!' : 'Copy clipboard'}
+              </Button>
+              {outputFilename && (
+                <Button design="Transparent" icon="download" disabled={!outputValue} onClick={handleDownload}>
+                  Download
+                </Button>
+              )}
+            </div>
+          </div>
+          <TextArea
+            value={outputValue}
+            rows={14}
+            readonly
+            style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
+          />
+        </div>
 
       </FlexBox>
     </Card>

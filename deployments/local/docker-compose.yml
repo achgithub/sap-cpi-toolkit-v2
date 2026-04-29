@@ -28,10 +28,16 @@ services:
       dockerfile: Dockerfile.api
     expose:
       - "8080"
+    ports:
+      - "8444:8444"
     environment:
       PORT: ${API_PORT:-8080}
+      MOCK_TLS_PORT: ${MOCK_TLS_PORT:-8444}
       DEPLOYMENT_ENV: ${DEPLOYMENT_ENV:-local}
       DB_URL: ${DB_URL:-postgres://toolkit:toolkit@postgres:5432/toolkit?sslmode=disable}
+      SFTP_DATA_DIR: /data/sftp
+    volumes:
+      - sftp-data:/data/sftp
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,6 +52,33 @@ services:
       - "8082"
     environment:
       PORT: ${GROOVY_PORT:-8082}
+    mem_limit: 512m
+    restart: unless-stopped
+
+  sftp-server:
+    build:
+      context: ../../sftp-server
+      dockerfile: Dockerfile
+    ports:
+      - "2222:22"
+    environment:
+      CONTROL_PLANE_URL: ${SFTP_CONTROL_PLANE_URL:-http://api:8080}
+      SFTP_ROOT_DIR: /data/sftp
+      HOST_KEY_PATH: /data/host_key
+    volumes:
+      - sftp-data:/data/sftp
+      - sftp-keys:/data
+    depends_on:
+      - api
+    mem_limit: 64m
+    restart: unless-stopped
+
+  sap-cloudconnector:
+    image: sap-cloudconnector:2.19.0
+    profiles:
+      - scc
+    ports:
+      - "8443:8443"
     mem_limit: 512m
     restart: unless-stopped
 
@@ -71,3 +104,5 @@ services:
 
 volumes:
   postgres-data:
+  sftp-data:
+  sftp-keys:

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Editor, { useMonaco } from '@monaco-editor/react'
 import type * as MonacoType from 'monaco-editor'
 import {
@@ -6,20 +6,19 @@ import {
   Card,
   CardHeader,
   FlexBox,
-  FlexBoxAlignItems,
   FlexBoxDirection,
-  Input,
   Label,
   MessageStrip,
   SegmentedButton,
   SegmentedButtonItem,
-  TabContainer,
-  Tab,
   TextArea,
   Toolbar,
   ToolbarSpacer,
 } from '@ui5/webcomponents-react'
-import { SCRIPTS, ALL_TAGS, type LibraryScript, type SampleInput, type Complexity } from '../data/scriptLibrary'
+import { useClipboard, clipboardName } from '../context/WorkspaceContext'
+import AssetBrowser from '../components/AssetBrowser'
+import type { AssetMeta } from '../components/AssetBrowser'
+import SaveAssetDialog from '../components/SaveAssetDialog'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -95,189 +94,9 @@ function segItem(e: Event) {
 
 // ── Script Library ────────────────────────────────────────────────────────────
 
-const COMPLEXITY_ORDER: Complexity[] = ['Beginner', 'Intermediate', 'Advanced']
-
-const COMPLEXITY_COLOR: Record<Complexity, string> = {
-  Beginner:     '#107e3e',
-  Intermediate: '#0070f2',
-  Advanced:     '#e76500',
-}
-
-function ComplexityBadge({ level }: { level: Complexity }) {
-  return (
-    <span style={{
-      display: 'inline-block', padding: '0.1rem 0.5rem', borderRadius: '0.75rem',
-      fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.02em',
-      color: '#fff', background: COMPLEXITY_COLOR[level],
-    }}>
-      {level}
-    </span>
-  )
-}
-
-function TagChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <span onClick={onClick} style={{
-      display: 'inline-block', padding: '0.1rem 0.55rem', borderRadius: '0.75rem',
-      fontSize: '0.72rem', cursor: 'pointer', userSelect: 'none',
-      fontWeight: active ? 600 : 400,
-      background: active ? 'var(--sapHighlightColor)' : 'var(--sapButton_Lite_Background)',
-      color: active ? '#fff' : 'var(--sapTextColor)',
-      border: '1px solid ' + (active ? 'var(--sapHighlightColor)' : 'var(--sapList_BorderColor)'),
-      transition: 'all 0.12s ease',
-    }}>
-      {label}
-    </span>
-  )
-}
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-  } catch {
-    const el = document.createElement('textarea')
-    el.value = text; document.body.appendChild(el); el.select()
-    document.execCommand('copy'); document.body.removeChild(el)
-  }
-}
-
-function ScriptCard({ script, onLoadInIDE }: { script: LibraryScript; onLoadInIDE: (body: string, sample?: SampleInput) => void }) {
-  const [copied,   setCopied]   = useState(false)
-  const [expanded, setExpanded] = useState(false)
-
-  return (
-    <Card style={{ marginBottom: '0.75rem' }}>
-      <FlexBox direction={FlexBoxDirection.Row} alignItems={FlexBoxAlignItems.Center}
-        style={{ padding: '0.75rem 1rem 0.4rem', gap: '0.6rem', flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 700, fontSize: '0.95rem', flex: 1, minWidth: '12rem' }}>{script.title}</span>
-        <ComplexityBadge level={script.complexity} />
-        {script.tenantOnly && (
-          <span style={{ fontSize: '0.72rem', fontWeight: 600, background: '#fef3e2', color: '#e76500',
-            border: '1px solid #e76500', borderRadius: '0.75rem', padding: '0.1rem 0.5rem' }}>
-            ⚠ Tenant Only
-          </span>
-        )}
-      </FlexBox>
-
-      <FlexBox direction={FlexBoxDirection.Row} style={{ padding: '0 1rem 0.5rem', gap: '0.35rem', flexWrap: 'wrap' }}>
-        {script.tags.map(tag => <TagChip key={tag} label={tag} active={false} onClick={() => {}} />)}
-      </FlexBox>
-
-      <div style={{ padding: '0 1rem 0.5rem', fontSize: '0.86rem', color: 'var(--sapTextColor)', lineHeight: 1.5 }}>
-        {script.description}
-      </div>
-
-      {script.tenantOnly && (
-        <div style={{ padding: '0 1rem 0.5rem' }}>
-          <MessageStrip design="Critical" hideCloseButton>
-            ITApiFactory calls are commented out — works in the IDE but only executes on a deployed CPI tenant.
-          </MessageStrip>
-        </div>
-      )}
-
-      <div style={{ padding: '0 1rem 0.5rem' }}>
-        <button onClick={() => setExpanded(e => !e)} style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: 'var(--sapLinkColor)', fontSize: '0.82rem', padding: '0.2rem 0', textDecoration: 'underline',
-        }}>
-          {expanded ? '▲ Hide code' : '▶ Show code'}
-        </button>
-        {expanded && (
-          <pre style={{
-            background: 'var(--sapShell_Background)', border: '1px solid var(--sapList_BorderColor)',
-            borderRadius: '0.25rem', padding: '0.75rem', fontFamily: 'monospace', fontSize: '0.78rem',
-            lineHeight: 1.55, overflowX: 'auto', overflowY: 'auto', maxHeight: '22rem',
-            margin: '0.4rem 0 0', whiteSpace: 'pre',
-          }}>
-            {script.body}
-          </pre>
-        )}
-      </div>
-
-      <Toolbar style={{ padding: '0.25rem 0.75rem 0.75rem', borderTop: 'none' }}>
-        <Button design="Emphasized" icon="source-code" onClick={() => onLoadInIDE(script.body, script.sampleInput)}>
-          Load in IDE
-        </Button>
-        <Button design="Transparent" icon="copy" onClick={async () => {
-          await copyText(script.body); setCopied(true); setTimeout(() => setCopied(false), 1800)
-        }}>
-          {copied ? 'Copied!' : 'Copy'}
-        </Button>
-        <ToolbarSpacer />
-        <Label style={{ color: 'var(--sapNeutralColor)', fontSize: '0.78rem' }}>
-          {script.body.split('\n').length} lines
-        </Label>
-      </Toolbar>
-    </Card>
-  )
-}
-
-function ScriptLibraryPanel({ onLoadInIDE }: { onLoadInIDE: (body: string, sample?: SampleInput) => void }) {
-  const [search,     setSearch]     = useState('')
-  const [complexity, setComplexity] = useState<Complexity | 'All'>('All')
-  const [activeTag,  setActiveTag]  = useState('')
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    return SCRIPTS.filter(s => {
-      if (complexity !== 'All' && s.complexity !== complexity) return false
-      if (activeTag && !s.tags.includes(activeTag)) return false
-      if (q && !s.title.toLowerCase().includes(q) &&
-               !s.description.toLowerCase().includes(q) &&
-               !s.tags.some(t => t.toLowerCase().includes(q))) return false
-      return true
-    })
-  }, [search, complexity, activeTag])
-
-  return (
-    <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.75rem', padding: '1rem' }}>
-      <Card>
-        <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '0.75rem 1rem', gap: '0.6rem' }}>
-          <FlexBox direction={FlexBoxDirection.Row} alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.75rem' }}>
-            <Label style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Search</Label>
-            <Input value={search} placeholder="Filter by title, description or tag…" style={{ flex: 1 }}
-              onInput={(e) => setSearch((e.target as unknown as HTMLInputElement).value)} />
-            {(search || complexity !== 'All' || activeTag) && (
-              <Button design="Transparent" onClick={() => { setSearch(''); setComplexity('All'); setActiveTag('') }}>Clear</Button>
-            )}
-          </FlexBox>
-          <FlexBox direction={FlexBoxDirection.Row} alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
-            <Label style={{ fontWeight: 600, whiteSpace: 'nowrap', marginRight: '0.25rem' }}>Level</Label>
-            {(['All', ...COMPLEXITY_ORDER] as const).map(c => (
-              <TagChip key={c} label={c} active={complexity === c} onClick={() => setComplexity(c)} />
-            ))}
-          </FlexBox>
-          <FlexBox direction={FlexBoxDirection.Row} alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.35rem', flexWrap: 'wrap' }}>
-            <Label style={{ fontWeight: 600, whiteSpace: 'nowrap', marginRight: '0.25rem' }}>Tag</Label>
-            {ALL_TAGS.map(tag => (
-              <TagChip key={tag} label={tag} active={activeTag === tag}
-                onClick={() => setActiveTag(activeTag === tag ? '' : tag)} />
-            ))}
-          </FlexBox>
-        </FlexBox>
-      </Card>
-
-      <FlexBox direction={FlexBoxDirection.Row} alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem' }}>
-        <Label style={{ color: 'var(--sapNeutralColor)', fontSize: '0.86rem' }}>
-          {filtered.length} of {SCRIPTS.length} scripts
-          {filtered.length === 0 && ' — try a different filter'}
-        </Label>
-      </FlexBox>
-
-      {filtered.map(script => (
-        <ScriptCard key={script.id} script={script} onLoadInIDE={onLoadInIDE} />
-      ))}
-    </FlexBox>
-  )
-}
-
 // ── IDE Panel ─────────────────────────────────────────────────────────────────
 
-interface IDEPanelProps {
-  inject?: { script: string; sample?: SampleInput; key: number }
-}
-
-function IDEPanel({ inject }: IDEPanelProps) {
+export default function IDEPanel() {
   const [script,     setScript]     = useState(SAMPLE_SCRIPT)
   const [body,       setBody]       = useState(SAMPLE_BODY)
   const [headersRaw, setHeadersRaw] = useState('Content-Type: application/xml')
@@ -287,6 +106,13 @@ function IDEPanel({ inject }: IDEPanelProps) {
   const [result,     setResult]     = useState<ExecuteResult | null>(null)
   const [lintErrors, setLintErrors] = useState<LintError[]>([])
   const [darkTheme,  setDarkTheme]  = useState(false)
+  const [scriptSent,      setScriptSent]      = useState(false)
+  const [bodySent,        setBodySent]        = useState(false)
+  const [scriptBrowser,   setScriptBrowser]   = useState(false)
+  const [scriptSave,      setScriptSave]      = useState(false)
+  const [bodyBrowser,     setBodyBrowser]     = useState(false)
+  const [resultSave,      setResultSave]      = useState(false)
+  const { clipboard, pushClipboard } = useClipboard()
 
   const monaco    = useMonaco()
   const editorRef = useRef<MonacoType.editor.IStandaloneCodeEditor | null>(null)
@@ -323,17 +149,15 @@ function IDEPanel({ inject }: IDEPanelProps) {
     if (monaco && editorRef.current) runLint(script)
   }, [monaco]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (!inject?.script) return
-    setScript(inject.script)
+  function loadFromAsset(content: string, meta: AssetMeta) {
+    setScript(content)
     setLintErrors([])
     setResult(null)
-    if (inject.sample) {
-      if (inject.sample.body       !== undefined) setBody(inject.sample.body)
-      if (inject.sample.headers    !== undefined) setHeadersRaw(inject.sample.headers)
-      if (inject.sample.properties !== undefined) setPropsRaw(inject.sample.properties)
-    }
-  }, [inject?.key]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (meta.meta?.sample_body    !== undefined) setBody(meta.meta.sample_body as string)
+    if (meta.meta?.sample_headers !== undefined) setHeadersRaw(meta.meta.sample_headers as string)
+    if (meta.meta?.sample_props   !== undefined) setPropsRaw(meta.meta.sample_props as string)
+    setScriptBrowser(false)
+  }
 
   const run = async () => {
     setRunning(true); setResult(null)
@@ -412,6 +236,23 @@ function IDEPanel({ inject }: IDEPanelProps) {
               </span>
             )}
             <ToolbarSpacer />
+            <Button design="Transparent" icon="open-folder" onClick={() => setScriptBrowser(true)}>
+              Load asset
+            </Button>
+            <Button design="Transparent" icon="save" onClick={() => setScriptSave(true)}>
+              Save asset
+            </Button>
+            <Button design="Transparent" icon="paste" disabled={clipboard.length === 0}
+              onClick={() => { setScript(clipboard[0].content); setLintErrors([]); setResult(null) }}>
+              Paste clipboard
+            </Button>
+            <Button design="Transparent" icon={scriptSent ? 'accept' : 'copy'}
+              onClick={() => {
+                pushClipboard({ name: clipboardName('Groovy script'), content: script, source: 'Groovy IDE' })
+                setScriptSent(true); setTimeout(() => setScriptSent(false), 1800)
+              }}>
+              {scriptSent ? 'Sent!' : 'Copy clipboard'}
+            </Button>
             <Button design="Transparent" onClick={() => setDarkTheme(v => !v)}>
               {darkTheme ? '☀ Light' : '☾ Dark'}
             </Button>
@@ -433,7 +274,23 @@ function IDEPanel({ inject }: IDEPanelProps) {
 
         <Card header={<CardHeader titleText="Input" subtitleText="Message body, headers and properties" />} style={{ flex: 1 }}>
           <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '1rem', gap: '0.75rem' }}>
-            <Label style={{ fontWeight: 600 }}>Body</Label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Label style={{ fontWeight: 600 }}>Body</Label>
+              <div style={{ display: 'flex', gap: '0.25rem' }}>
+                {clipboard.length > 0 && (
+                  <Button design="Transparent" icon="paste"
+                    style={{ height: '1.5rem', padding: '0 0.4rem', fontSize: '0.75rem' }}
+                    onClick={() => setBody(clipboard[0].content)}>
+                    Clipboard
+                  </Button>
+                )}
+                <Button design="Transparent" icon="open-folder"
+                  style={{ height: '1.5rem', padding: '0 0.4rem', fontSize: '0.75rem' }}
+                  onClick={() => setBodyBrowser(true)}>
+                  Load asset
+                </Button>
+              </div>
+            </div>
             <TextArea value={body} rows={8}
               style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
               onInput={(e) => setBody((e.target as unknown as HTMLTextAreaElement).value)} />
@@ -470,7 +327,26 @@ function IDEPanel({ inject }: IDEPanelProps) {
 
             {result && !result.error && (
               <>
-                <Label style={{ fontWeight: 600 }}>Result Body</Label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Label style={{ fontWeight: 600 }}>Result Body</Label>
+                  {result.body && (
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                      <Button design="Transparent" icon={bodySent ? 'accept' : 'copy'}
+                        style={{ height: '1.5rem', padding: '0 0.4rem', fontSize: '0.75rem' }}
+                        onClick={() => {
+                          pushClipboard({ name: clipboardName('Groovy output'), content: result.body ?? '', source: 'Groovy IDE' })
+                          setBodySent(true); setTimeout(() => setBodySent(false), 1800)
+                        }}>
+                        {bodySent ? 'Sent!' : 'Clipboard'}
+                      </Button>
+                      <Button design="Transparent" icon="save"
+                        style={{ height: '1.5rem', padding: '0 0.4rem', fontSize: '0.75rem' }}
+                        onClick={() => setResultSave(true)}>
+                        Save asset
+                      </Button>
+                    </div>
+                  )}
+                </div>
                 <TextArea value={result.body ?? ''} rows={8} readonly
                   style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }} />
 
@@ -511,39 +387,22 @@ function IDEPanel({ inject }: IDEPanelProps) {
         </Card>
 
       </FlexBox>
+
+      <AssetBrowser open={scriptBrowser} onClose={() => setScriptBrowser(false)}
+        filterType="groovy" title="Load Groovy Script"
+        onSelect={loadFromAsset} />
+      <SaveAssetDialog open={scriptSave} content={script} defaultType="groovy"
+        defaultName={clipboardName('Groovy script')}
+        meta={{ sample_body: body, sample_headers: headersRaw, sample_props: propsRaw }}
+        onClose={() => setScriptSave(false)} onSaved={() => setScriptSave(false)} />
+      <AssetBrowser open={bodyBrowser} onClose={() => setBodyBrowser(false)}
+        title="Load Asset into Body"
+        onSelect={(content) => { setBody(content); setBodyBrowser(false) }} />
+      {result?.body && (
+        <SaveAssetDialog open={resultSave} content={result.body} defaultType="payload"
+          defaultName={clipboardName('Groovy output')} onClose={() => setResultSave(false)} />
+      )}
     </FlexBox>
   )
 }
 
-// ── Root ──────────────────────────────────────────────────────────────────────
-
-export default function GroovyIDE() {
-  const [activeTab,  setActiveTab]  = useState(0)
-  const [injectKey,  setInjectKey]  = useState(0)
-  const [injectData, setInjectData] = useState<{ script: string; sample?: SampleInput } | null>(null)
-
-  function loadInIDE(script: string, sample?: SampleInput) {
-    setInjectData({ script, sample })
-    setInjectKey(k => k + 1)
-    setActiveTab(0)
-  }
-
-  return (
-    <div style={{ height: '100%', overflow: 'auto' }}>
-      <TabContainer
-        style={{ height: '100%' }}
-        onTabSelect={(e) => {
-          const idx = (e.detail as unknown as { tabIndex: number }).tabIndex
-          setActiveTab(idx)
-        }}
-      >
-        <Tab text="IDE" selected={activeTab === 0}>
-          <IDEPanel inject={injectData ? { script: injectData.script, sample: injectData.sample, key: injectKey } : undefined} />
-        </Tab>
-        <Tab text="Script Library" selected={activeTab === 1}>
-          <ScriptLibraryPanel onLoadInIDE={loadInIDE} />
-        </Tab>
-      </TabContainer>
-    </div>
-  )
-}

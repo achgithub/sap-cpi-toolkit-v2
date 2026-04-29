@@ -2,8 +2,6 @@ import { useState } from 'react'
 import {
   ShellBar,
   Avatar,
-  TabContainer,
-  Tab,
   FlexBox,
   FlexBoxDirection,
   Button,
@@ -15,14 +13,51 @@ import MonitoringPhase from './pages/monitoring/MonitoringPhase'
 import ToolboxPanel, { type ToolID } from './components/ToolboxPanel'
 import SettingsDialog from './components/SettingsDialog'
 import ContextBar from './components/ContextBar'
-import { WorkspaceProvider } from './context/WorkspaceContext'
+import { WorkspaceProvider, useClipboard } from './context/WorkspaceContext'
 import { Dialog, Bar, Button as Btn } from '@ui5/webcomponents-react'
 import Formatter from './tools/Formatter'
 import Security from './tools/Security'
 import GroovyIDE from './tools/GroovyIDE'
+import HttpClient from './tools/HttpClient'
+import AssetLibrary from './tools/AssetLibrary'
+import MockServer from './tools/MockServer'
+import SFTPServer from './tools/SFTPServer'
 
 type Phase = 'design' | 'develop' | 'test' | 'monitoring'
-const PHASES: Phase[] = ['design', 'develop', 'test', 'monitoring']
+
+
+function ClipboardBadge({ onClick }: { onClick: () => void }) {
+  const { clipboard } = useClipboard()
+  if (!clipboard.length) return null
+  return (
+    <button
+      onClick={onClick}
+      title={`Clipboard active: ${clipboard[0].name}\nClick to open Toolbox`}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '0.3rem',
+        background: 'var(--sapNeutralBackground)',
+        border: '1px solid var(--sapList_BorderColor)',
+        borderRadius: '12px', padding: '0.1rem 0.6rem 0.1rem 0.4rem',
+        cursor: 'pointer', fontFamily: 'var(--sapFontFamily)',
+        fontSize: '0.72rem', color: 'var(--sapTextColor)',
+        maxWidth: '180px',
+      }}
+    >
+      <span style={{ fontSize: '0.7rem', color: 'var(--sapHighlightColor)', flexShrink: 0 }}>▶</span>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {clipboard[0].name}
+      </span>
+      {clipboard.length > 1 && (
+        <span style={{
+          fontSize: '0.65rem', background: 'var(--sapHighlightColor)', color: '#fff',
+          borderRadius: '8px', padding: '0 0.3rem', lineHeight: '1.4', flexShrink: 0,
+        }}>
+          +{clipboard.length - 1}
+        </span>
+      )}
+    </button>
+  )
+}
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>('design')
@@ -68,29 +103,49 @@ export default function App() {
         }}
       >
         <ContextBar />
-        <Button
-          icon="wrench"
-          design="Transparent"
-          onClick={() => setToolboxOpen(true)}
-        >
-          Toolbox
-        </Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <ClipboardBadge onClick={() => setToolboxOpen(true)} />
+          <Button
+            icon="wrench"
+            design="Transparent"
+            onClick={() => setToolboxOpen(true)}
+          >
+            Toolbox
+          </Button>
+        </div>
       </FlexBox>
 
-      <TabContainer
-        onTabSelect={(e) => {
-          // UI5 TabContainer fires tabIndex in the event detail
-          const idx = (e.detail as unknown as { tabIndex: number }).tabIndex
-          setPhase(PHASES[idx] ?? 'design')
-        }}
-        style={{ borderBottom: '1px solid var(--sapList_BorderColor)' }}
-      >
-        <Tab text="Design" selected={phase === 'design'} />
-        <Tab text="Develop" selected={phase === 'develop'} />
-        <Tab text="Test" selected={phase === 'test'} />
-        <Tab text="Monitoring" selected={phase === 'monitoring'} />
-      </TabContainer>
+      {/* Tab bar */}
+      <div style={{
+        display: 'flex',
+        borderBottom: '2px solid var(--sapList_BorderColor)',
+        background: 'var(--sapGroup_TitleBackground)',
+        padding: '0 1rem',
+        flexShrink: 0,
+      }}>
+        {(['design', 'develop', 'test', 'monitoring'] as Phase[]).map(p => (
+          <button
+            key={p}
+            onClick={() => setPhase(p)}
+            style={{
+              padding: '0.6rem 1.25rem',
+              border: 'none',
+              borderBottom: phase === p ? '2px solid var(--sapHighlightColor)' : '2px solid transparent',
+              marginBottom: '-2px',
+              background: 'transparent',
+              cursor: 'pointer',
+              fontFamily: 'var(--sapFontFamily)',
+              fontSize: 'var(--sapFontSize)',
+              color: phase === p ? 'var(--sapHighlightColor)' : 'var(--sapTextColor)',
+              fontWeight: phase === p ? 600 : 400,
+            }}
+          >
+            {p.charAt(0).toUpperCase() + p.slice(1)}
+          </button>
+        ))}
+      </div>
 
+      {/* Phase content */}
       <div style={{ flex: 1, overflow: 'auto', background: 'var(--sapBackgroundColor)' }}>
         {phase === 'design'     && <DesignPhase />}
         {phase === 'develop'    && <DevelopPhase />}
@@ -145,6 +200,67 @@ export default function App() {
         onClose={closeTool}
       >
         <Security />
+        <Bar slot="footer">
+          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
+            {maximized ? 'Restore' : 'Maximise'}
+          </Btn>
+          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
+        </Bar>
+      </Dialog>
+
+      <Dialog
+        open={activeTool === 'sftp'}
+        headerText="SFTP Server"
+        stretch
+        style={{ width: '100vw', height: '100vh' }}
+        onClose={closeTool}
+      >
+        <SFTPServer />
+        <Bar slot="footer">
+          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
+        </Bar>
+      </Dialog>
+
+      <Dialog
+        open={activeTool === 'assets'}
+        headerText="Asset Library"
+        stretch={maximized}
+        style={maximized ? undefined : { width: '90vw', height: '90vh' }}
+        onClose={closeTool}
+      >
+        <AssetLibrary />
+        <Bar slot="footer">
+          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
+            {maximized ? 'Restore' : 'Maximise'}
+          </Btn>
+          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
+        </Bar>
+      </Dialog>
+
+      <Dialog
+        open={activeTool === 'http-client'}
+        headerText="HTTP Client"
+        stretch={maximized}
+        style={maximized ? undefined : { width: '80vw', height: '90vh' }}
+        onClose={closeTool}
+      >
+        <HttpClient />
+        <Bar slot="footer">
+          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
+            {maximized ? 'Restore' : 'Maximise'}
+          </Btn>
+          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
+        </Bar>
+      </Dialog>
+
+      <Dialog
+        open={activeTool === 'mock-server'}
+        headerText="HTTP Mock Server"
+        stretch={maximized}
+        style={maximized ? undefined : { width: '90vw', height: '90vh' }}
+        onClose={closeTool}
+      >
+        <MockServer />
         <Bar slot="footer">
           <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
             {maximized ? 'Restore' : 'Maximise'}
