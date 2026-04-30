@@ -6,7 +6,7 @@ import {
 import PhaseLayout from '../../components/PhaseLayout'
 import { useWorkspace, type Project } from '../../context/WorkspaceContext'
 import ProjectSetup from './ProjectSetup'
-import AdapterTemplates from '../../tools/AdapterTemplates'
+import ProjectAdapterTemplates from '../../tools/ProjectAdapterTemplates'
 
 interface ProjectForm { name: string; description: string }
 const emptyForm = (): ProjectForm => ({ name: '', description: '' })
@@ -163,9 +163,9 @@ function ProjectsSection() {
 // ── Design phase shell with sub-nav ──────────────────────────────────────────
 
 const DESIGN_NAV = [
-  { id: 'projects',           label: 'Projects',           icon: 'business-objects-experience' },
-  { id: 'adapter-templates',  label: 'Adapter Templates',  icon: 'wrench'                      },
-  { id: 'diagram',            label: 'Interface Diagram',  icon: 'org-chart'                   },
+  { id: 'projects',   label: 'Projects',          icon: 'business-objects-experience' },
+  { id: 'templates',  label: 'Templates',          icon: 'wrench'                      },
+  { id: 'diagram',    label: 'Interface Diagram',  icon: 'org-chart'                   },
 ]
 
 function PhasePlaceholder({ title, description }: { title: string; description: string }) {
@@ -177,14 +177,41 @@ function PhasePlaceholder({ title, description }: { title: string; description: 
   )
 }
 
+function TemplatesSection() {
+  const { selectedProject } = useWorkspace()
+  if (!selectedProject) {
+    return (
+      <PhasePlaceholder
+        title="No project selected"
+        description="Select a project from the Projects tab to view and edit its adapter templates."
+      />
+    )
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{
+        padding: '0.5rem 1rem', borderBottom: '1px solid var(--sapList_BorderColor)',
+        background: 'var(--sapGroup_TitleBackground)', flexShrink: 0,
+        fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)',
+      }}>
+        Showing templates for project: <strong style={{ color: 'var(--sapTextColor)' }}>{selectedProject.name}</strong>
+        &nbsp;— changes here only affect this project. Edit the global library via Toolbox → Adapter Templates.
+      </div>
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        <ProjectAdapterTemplates projectId={selectedProject.id} projectName={selectedProject.name} />
+      </div>
+    </div>
+  )
+}
+
 export default function DesignPhase() {
   return (
     <PhaseLayout storageKey="v2-design" items={DESIGN_NAV}>
       {(id) => (
         <>
-          {id === 'projects'          && <ProjectsSection />}
-          {id === 'adapter-templates' && <AdapterTemplates />}
-          {id === 'diagram'           && <PhasePlaceholder title="Interface Diagram" description="Freeform block diagram builder. POC complete in V1 — full project-linked build coming in Step 7." />}
+          {id === 'projects'  && <ProjectsSection />}
+          {id === 'templates' && <TemplatesSection />}
+          {id === 'diagram'   && <PhasePlaceholder title="Interface Diagram" description="Freeform block diagram builder. POC complete in V1 — full project-linked build coming in Step 7." />}
         </>
       )}
     </PhaseLayout>

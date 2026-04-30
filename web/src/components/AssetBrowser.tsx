@@ -29,7 +29,7 @@ interface Props {
   title?: string
 }
 
-const TYPE_FILTERS = ['all', 'xml', 'json', 'script', 'request', 'payload', 'snippet', 'cert']
+const TYPE_FILTERS = ['all', 'xml', 'json', 'groovy', 'xslt', 'request', 'payload', 'snippet', 'cert']
 
 function TypeChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (

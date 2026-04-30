@@ -31,9 +31,9 @@ function relTime(iso: string): string {
   return new Date(iso).toLocaleDateString()
 }
 
-export default function AdapterTemplates({ projectId }: { projectId?: string }) {
-  const { selectedProject } = useWorkspace()
-  const effectiveProjectId = projectId ?? selectedProject?.id
+export default function AdapterTemplates({ projectId, projectName }: { projectId?: string; projectName?: string }) {
+  useWorkspace() // context available if needed
+  const effectiveProjectId = projectId ?? null   // only project-scoped when explicitly passed
   const mode: Mode = effectiveProjectId ? 'project' : 'global'
 
   const [groups,    setGroups]    = useState<FragmentGroup[]>([])
@@ -45,9 +45,11 @@ export default function AdapterTemplates({ projectId }: { projectId?: string }) 
   const [dirty,     setDirty]     = useState(false)
   const [error,     setError]     = useState('')
   const [saved,     setSaved]     = useState(false)
-  const [newVariantKey,  setNewVariantKey]  = useState<string | null>(null)
-  const [newVariantName, setNewVariantName] = useState('')
-  const [creating, setCreating] = useState(false)
+  const [newVariantKey,   setNewVariantKey]   = useState<string | null>(null)
+  const [newVariantName,  setNewVariantName]  = useState('')
+  const [creating,        setCreating]        = useState(false)
+  const [newFragmentOpen, setNewFragmentOpen] = useState(false)
+  const [newFragmentKey,  setNewFragmentKey]  = useState('')
 
   const baseUrl = mode === 'project' && effectiveProjectId
     ? `/api/v2/projects/${effectiveProjectId}/scaffold/templates`
@@ -192,7 +194,7 @@ export default function AdapterTemplates({ projectId }: { projectId?: string }) 
     }
   }
 
-  const scopeLabel = mode === 'project' && selectedProject ? selectedProject.name : 'Global'
+  const scopeLabel = mode === 'project' && projectName ? projectName : 'Global'
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -292,6 +294,55 @@ export default function AdapterTemplates({ projectId }: { projectId?: string }) 
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Add new fragment key */}
+        {!loading && (
+          <div style={{ flexShrink: 0, borderTop: '1px solid var(--sapList_BorderColor)', padding: '0.5rem' }}>
+            {!newFragmentOpen ? (
+              <Button design="Transparent" icon="add" style={{ width: '100%', fontSize: '0.78rem' }}
+                onClick={() => { setNewFragmentOpen(true); setNewFragmentKey(''); setNewVariantName('Default') }}>
+                New Fragment
+              </Button>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <Input
+                  value={newFragmentKey}
+                  placeholder="fragment_key (e.g. sender_messageflow_RFC)"
+                  style={{ fontSize: '0.78rem', fontFamily: 'monospace' }}
+                  onInput={e => setNewFragmentKey((e.target as unknown as InputDomRef).value ?? '')}
+                />
+                <div style={{ display: 'flex', gap: '0.35rem' }}>
+                  <Button design="Emphasized" style={{ flex: 1 }}
+                    disabled={creating || !newFragmentKey.trim()}
+                    onClick={async () => {
+                      setCreating(true); setError('')
+                      try {
+                        const key = newFragmentKey.trim()
+                        const url = mode === 'project' && effectiveProjectId
+                          ? `/api/v2/projects/${effectiveProjectId}/scaffold/templates/${encodeURIComponent(key)}/variants`
+                          : `/api/v2/scaffold/templates/${encodeURIComponent(key)}/variants`
+                        const res = await fetch(url, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ variant_name: 'Default', content: '<!-- new fragment -->' }),
+                        })
+                        if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error ?? res.statusText) }
+                        const created: TemplateVariant = await res.json()
+                        setNewFragmentOpen(false); setNewFragmentKey(''); setNewVariantName('')
+                        await load()
+                        const group = groups.find(g => g.fragment_key === key) ?? { fragment_key: key, description: '', variants: [created] }
+                        selectVariant(group, created)
+                      } catch (e: unknown) { setError(String(e)) }
+                      finally { setCreating(false) }
+                    }}>
+                    {creating ? '…' : 'Add'}
+                  </Button>
+                  <Button design="Transparent" onClick={() => setNewFragmentOpen(false)}>✕</Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
