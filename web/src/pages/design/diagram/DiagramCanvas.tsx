@@ -81,7 +81,7 @@ function buildGraph(
       id: `e-${key}`,
       source,
       target,
-      type: 'smoothstep',
+      type: 'default',
       data: { ifaceIds, key },
       // No markerEnd → no arrows
       style: {
@@ -102,17 +102,20 @@ function buildGraph(
 
 // ── Custom node ───────────────────────────────────────────────────────────────
 
-// Left/right handles only — forces edges to stay horizontal between Dagre ranks.
-// opacity:0 keeps them invisible but in the DOM so React Flow can measure positions.
-const HIDDEN: React.CSSProperties = { opacity: 0, width: 8, height: 8, border: 'none' }
+// Small neutral handles — visible to the browser (so React Flow can measure them)
+// but subtle enough not to distract. Matches the node border colour.
+const HANDLE: React.CSSProperties = {
+  width: 6, height: 6, border: 'none', borderRadius: '50%',
+  background: 'var(--sapList_BorderColor)',
+}
 
 function SystemNode({ data }: { data: { system: IFSystem; color: string } }) {
   const { system: s, color } = data
   const infraLine = [s.infra_type, s.infra_region].filter(Boolean).join(' · ')
   return (
     <>
-      <Handle type="target" position={Position.Left}  style={HIDDEN} id="l" />
-      <Handle type="source" position={Position.Right} style={HIDDEN} id="r" />
+      <Handle type="target" position={Position.Left}  style={HANDLE} id="l" />
+      <Handle type="source" position={Position.Right} style={HANDLE} id="r" />
       <div style={{
         width: '100%', height: '100%', boxSizing: 'border-box',
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
