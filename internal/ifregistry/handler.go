@@ -40,6 +40,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// Global config (system types, infra types, integration platforms)
 	mux.HandleFunc("GET /config/{key}",  h.getConfig)
 	mux.HandleFunc("PUT /config/{key}",  h.putConfig)
+
+	// Dev-only seed endpoint — remove seed.go after load testing
+	mux.HandleFunc("POST /projects/{pid}/debug/seed", h.seedDemo)
 }
 
 func jsonResp(w http.ResponseWriter, status int, v any) {
