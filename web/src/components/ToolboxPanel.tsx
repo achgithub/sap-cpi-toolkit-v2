@@ -1,7 +1,7 @@
 import { Button, Icon } from '@ui5/webcomponents-react'
 import { useClipboard, type ClipboardEntry } from '../context/WorkspaceContext'
 
-export type ToolID = 'formatter' | 'groovy' | 'sftp' | 'http-client' | 'mock-server' | 'edi' | 'security' | 'assets' | 'cloud-connector' | 'adapter-templates'
+export type ToolID = 'formatter' | 'groovy' | 'sftp' | 'http-client' | 'mock-server' | 'edi' | 'security' | 'assets' | 'cloud-connector' | 'adapter-templates' | 'registry-settings'
 
 interface Tool {
   id: ToolID
@@ -22,7 +22,8 @@ const TOOLS: Tool[] = [
   { id: 'mock-server',  icon: 'simulate',         name: 'HTTP Mock Server',      description: 'Intercept & respond',           image: 'http-tools',    available: true  },
   { id: 'edi',          icon: 'documents',        name: 'EDI Tools',             description: 'EDIFACT & ANSI X12',            image: 'api',           available: true  },
   { id: 'security',         icon: 'locked',           name: 'Security',              description: 'Auth headers, PGP, SSH, certs', image: 'api',           available: true  },
-  { id: 'cloud-connector', icon: 'cloud',            name: 'Cloud Connector',       description: 'SAP CC setup & status',         image: 'api',           available: true  },
+  { id: 'cloud-connector',    icon: 'cloud',            name: 'Cloud Connector',       description: 'SAP CC setup & status',         image: 'api',           available: true  },
+  { id: 'registry-settings', icon: 'customize',        name: 'Registry Settings',     description: 'System types, infra & platforms', image: 'api',           available: true  },
 ]
 
 function relTime(ts: number): string {

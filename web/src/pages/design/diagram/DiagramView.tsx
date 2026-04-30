@@ -30,17 +30,17 @@ function DiagramInner({ projectId }: { projectId: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   useEffect(() => {
+    data.loadConfig()
     data.load()
   }, [projectId])
 
   const selectedIface = selectedId ? data.interfaces.find(i => i.id === selectedId) ?? null : null
-
   const detailWidth = selectedIface ? 360 : 0
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
 
-      {/* Left: React Flow canvas */}
+      {/* Canvas */}
       <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
         {data.loading && (
           <div style={{
@@ -66,6 +66,7 @@ function DiagramInner({ projectId }: { projectId: string }) {
           <DiagramCanvas
             systems={data.systems}
             interfaces={data.interfaces}
+            config={data.config}
             selectedIfaceId={selectedId}
             onSelectIface={setSelectedId}
             onNodeMoved={data.updateSystemPos}
@@ -73,37 +74,28 @@ function DiagramInner({ projectId }: { projectId: string }) {
         </ReactFlowProvider>
       </div>
 
-      {/* Right: Registry panel (always visible) */}
-      <div style={{
-        width: '260px', flexShrink: 0,
-        borderLeft: '1px solid var(--sapList_BorderColor)',
-        background: 'var(--sapGroup_ContentBackground)',
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      }}>
+      {/* Registry panel */}
+      <div style={{ width: '260px', flexShrink: 0, borderLeft: '1px solid var(--sapList_BorderColor)', background: 'var(--sapGroup_ContentBackground)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <RegistryPanel
           systems={data.systems}
           interfaces={data.interfaces}
+          config={data.config}
           selectedId={selectedId}
           onSelect={id => setSelectedId(prev => prev === id ? null : id)}
           onCreateSystem={data.createSystem}
           onCreateInterface={data.createInterface}
+          onDeleteSystem={data.deleteSystem}
         />
       </div>
 
-      {/* Far right: Interface detail (slides in) */}
-      <div style={{
-        width: `${detailWidth}px`,
-        flexShrink: 0,
-        borderLeft: detailWidth > 0 ? '1px solid var(--sapList_BorderColor)' : 'none',
-        background: 'var(--sapGroup_ContentBackground)',
-        overflow: 'hidden',
-        transition: 'width 200ms ease',
-      }}>
+      {/* Detail panel */}
+      <div style={{ width: `${detailWidth}px`, flexShrink: 0, borderLeft: detailWidth > 0 ? '1px solid var(--sapList_BorderColor)' : 'none', background: 'var(--sapGroup_ContentBackground)', overflow: 'hidden', transition: 'width 200ms ease' }}>
         {selectedIface && (
           <InterfaceDetail
             key={selectedIface.id}
             iface={selectedIface}
             systems={data.systems}
+            config={data.config}
             onUpdate={body => data.updateInterface(selectedIface.id, body)}
             onDelete={async () => { await data.deleteInterface(selectedIface.id); setSelectedId(null) }}
             onAddReceiver={body => data.addReceiver(selectedIface.id, body)}
@@ -113,7 +105,6 @@ function DiagramInner({ projectId }: { projectId: string }) {
           />
         )}
       </div>
-
     </div>
   )
 }

@@ -36,6 +36,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /projects/{pid}/interfaces/{id}/receivers",           h.addReceiver)
 	mux.HandleFunc("PUT /projects/{pid}/interfaces/{id}/receivers/{rid}",      h.updateReceiver)
 	mux.HandleFunc("DELETE /projects/{pid}/interfaces/{id}/receivers/{rid}",   h.deleteReceiver)
+
+	// Global config (system types, infra types, integration platforms)
+	mux.HandleFunc("GET /config/{key}",  h.getConfig)
+	mux.HandleFunc("PUT /config/{key}",  h.putConfig)
 }
 
 func jsonResp(w http.ResponseWriter, status int, v any) {

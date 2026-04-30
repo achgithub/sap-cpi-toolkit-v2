@@ -1,11 +1,18 @@
 import { useState, useCallback } from 'react'
-import type { IFSystem, IFInterface } from './types'
+import type { IFSystem, IFInterface, RegistryConfig, SystemTypeConfig, InfraTypeConfig, PlatformConfig } from './types'
 
 const BASE = '/api/interfaces'
+
+const DEFAULT_CONFIG: RegistryConfig = {
+  systemTypes: [{ name: 'Custom', color: '#78909C' }],
+  infraTypes:  [{ name: 'On-Prem', category: 'on_prem' }],
+  platforms:   [{ name: 'SAP CPI' }],
+}
 
 export function useRegistryData(projectId: string) {
   const [systems,    setSystems]    = useState<IFSystem[]>([])
   const [interfaces, setInterfaces] = useState<IFInterface[]>([])
+  const [config,     setConfig]     = useState<RegistryConfig>(DEFAULT_CONFIG)
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState('')
 
@@ -28,6 +35,30 @@ export function useRegistryData(projectId: string) {
     }
   }, [projectId])
 
+  const loadConfig = useCallback(async () => {
+    try {
+      const [stRes, itRes, plRes] = await Promise.all([
+        fetch(`${BASE}/config/system_types`),
+        fetch(`${BASE}/config/infra_types`),
+        fetch(`${BASE}/config/integration_platforms`),
+      ])
+      const [st, it, pl] = await Promise.all([stRes.json(), itRes.json(), plRes.json()]) as [
+        SystemTypeConfig[], InfraTypeConfig[], PlatformConfig[]
+      ]
+      setConfig({ systemTypes: st, infraTypes: it, platforms: pl })
+    } catch {
+      // keep defaults
+    }
+  }, [])
+
+  async function saveConfig(key: string, value: unknown): Promise<void> {
+    const res = await fetch(`${BASE}/config/${key}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value),
+    })
+    if (!res.ok) throw new Error('Failed to save config')
+    await loadConfig()
+  }
+
   // Systems
   async function createSystem(body: Partial<IFSystem>) {
     const res = await fetch(`${BASE}/projects/${projectId}/systems`, {
@@ -46,8 +77,7 @@ export function useRegistryData(projectId: string) {
   }
 
   async function deleteSystem(id: string) {
-    const res = await fetch(`${BASE}/projects/${projectId}/systems/${id}`, { method: 'DELETE' })
-    if (!res.ok && res.status !== 404) throw new Error('Delete failed')
+    await fetch(`${BASE}/projects/${projectId}/systems/${id}`, { method: 'DELETE' })
     await load()
   }
 
@@ -78,8 +108,7 @@ export function useRegistryData(projectId: string) {
   }
 
   async function deleteInterface(id: string) {
-    const res = await fetch(`${BASE}/projects/${projectId}/interfaces/${id}`, { method: 'DELETE' })
-    if (!res.ok && res.status !== 404) throw new Error('Delete failed')
+    await fetch(`${BASE}/projects/${projectId}/interfaces/${id}`, { method: 'DELETE' })
     await load()
   }
 
@@ -101,13 +130,13 @@ export function useRegistryData(projectId: string) {
   }
 
   async function deleteReceiver(ifaceId: string, rid: string) {
-    const res = await fetch(`${BASE}/projects/${projectId}/interfaces/${ifaceId}/receivers/${rid}`, { method: 'DELETE' })
-    if (!res.ok && res.status !== 404) throw new Error('Delete failed')
+    await fetch(`${BASE}/projects/${projectId}/interfaces/${ifaceId}/receivers/${rid}`, { method: 'DELETE' })
     await load()
   }
 
   return {
-    systems, interfaces, loading, error, load,
+    systems, interfaces, config, loading, error,
+    load, loadConfig, saveConfig,
     createSystem, updateSystem, deleteSystem, updateSystemPos,
     createInterface, updateInterface, deleteInterface,
     addReceiver, updateReceiver, deleteReceiver,

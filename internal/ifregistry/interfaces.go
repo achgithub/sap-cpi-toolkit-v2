@@ -7,16 +7,15 @@ import (
 )
 
 type Receiver struct {
-	ID              string            `json:"id"`
-	InterfaceID     string            `json:"interface_id"`
-	SystemID        *string           `json:"system_id"`
-	CpiIflowID      string            `json:"cpi_iflow_id"`
-	Transport       string            `json:"transport"`
-	AuthType        string            `json:"auth_type"`
-	FirewallZone    string            `json:"firewall_zone"`
-	CredentialAlias string            `json:"credential_alias"`
-	Meta            map[string]string `json:"meta"`
-	CreatedAt       time.Time         `json:"created_at"`
+	ID                  string            `json:"id"`
+	InterfaceID         string            `json:"interface_id"`
+	SystemID            *string           `json:"system_id"`
+	CpiIflowID          string            `json:"cpi_iflow_id"`
+	Transport           string            `json:"transport"`
+	AuthType            string            `json:"auth_type"`
+	CredentialAlias     string            `json:"credential_alias"`
+	Meta                map[string]string `json:"meta"`
+	CreatedAt           time.Time         `json:"created_at"`
 }
 
 type Interface struct {
@@ -27,12 +26,14 @@ type Interface struct {
 	InterfaceType        string            `json:"interface_type"`
 	Status               string            `json:"status"`
 	SenderSystemID       *string           `json:"sender_system_id"`
+	IntegrationPlatform  string            `json:"integration_platform"`
 	CpiPackageID         string            `json:"cpi_package_id"`
 	CpiIflowID           string            `json:"cpi_iflow_id"`
 	Transport            string            `json:"transport"`
 	AuthType             string            `json:"auth_type"`
-	FirewallZone         string            `json:"firewall_zone"`
 	CredentialAlias      string            `json:"credential_alias"`
+	EdgeStyle            string            `json:"edge_style"`
+	EdgeRouting          string            `json:"edge_routing"`
 	DebugTriggerEnabled  bool              `json:"debug_trigger_enabled"`
 	DebugTriggerMethod   string            `json:"debug_trigger_method"`
 	DebugTriggerPath     string            `json:"debug_trigger_path"`
@@ -43,15 +44,18 @@ type Interface struct {
 	UpdatedAt            time.Time         `json:"updated_at"`
 }
 
+const ifaceCols = `id, project_id, name, description, interface_type, status, sender_system_id,
+	integration_platform, cpi_package_id, cpi_iflow_id, transport, auth_type, credential_alias,
+	edge_style, edge_routing,
+	debug_trigger_enabled, debug_trigger_method, debug_trigger_path, debug_trigger_payload,
+	meta, created_at, updated_at`
+
+const recvCols = `id, interface_id, system_id, cpi_iflow_id, transport, auth_type, credential_alias, meta, created_at`
+
 func (h *Handler) listInterfaces(w http.ResponseWriter, r *http.Request) {
 	pid := r.PathValue("pid")
-
 	rows, err := h.pool.Query(r.Context(),
-		`SELECT id, project_id, name, description, interface_type, status, sender_system_id,
-		        cpi_package_id, cpi_iflow_id, transport, auth_type, firewall_zone, credential_alias,
-		        debug_trigger_enabled, debug_trigger_method, debug_trigger_path, debug_trigger_payload,
-		        meta, created_at, updated_at
-		 FROM interfaces WHERE project_id=$1 ORDER BY name`, pid)
+		`SELECT `+ifaceCols+` FROM interfaces WHERE project_id=$1 ORDER BY name`, pid)
 	if err != nil {
 		h.log.Error("list interfaces", "error", err)
 		apiError(w, 500, "internal error")
@@ -70,7 +74,6 @@ func (h *Handler) listInterfaces(w http.ResponseWriter, r *http.Request) {
 		ifaces = append(ifaces, iface)
 	}
 
-	// Bulk-load receivers for all interfaces
 	if len(ifaces) > 0 {
 		ids := make([]string, len(ifaces))
 		index := map[string]int{}
@@ -79,10 +82,7 @@ func (h *Handler) listInterfaces(w http.ResponseWriter, r *http.Request) {
 			index[iface.ID] = i
 		}
 		rrows, err := h.pool.Query(r.Context(),
-			`SELECT id, interface_id, system_id, cpi_iflow_id, transport, auth_type,
-			        firewall_zone, credential_alias, meta, created_at
-			 FROM interface_receivers WHERE interface_id = ANY($1) ORDER BY created_at`,
-			ids)
+			`SELECT `+recvCols+` FROM interface_receivers WHERE interface_id = ANY($1) ORDER BY created_at`, ids)
 		if err != nil {
 			h.log.Error("list receivers", "error", err)
 			apiError(w, 500, "internal error")
@@ -100,7 +100,6 @@ func (h *Handler) listInterfaces(w http.ResponseWriter, r *http.Request) {
 			ifaces[i].Receivers = append(ifaces[i].Receivers, rec)
 		}
 	}
-
 	jsonResp(w, 200, ifaces)
 }
 
@@ -108,21 +107,8 @@ func (h *Handler) getInterface(w http.ResponseWriter, r *http.Request) {
 	pid := r.PathValue("pid")
 	id := r.PathValue("id")
 
-	var rawMeta json.RawMessage
-	iface := Interface{}
-	err := h.pool.QueryRow(r.Context(),
-		`SELECT id, project_id, name, description, interface_type, status, sender_system_id,
-		        cpi_package_id, cpi_iflow_id, transport, auth_type, firewall_zone, credential_alias,
-		        debug_trigger_enabled, debug_trigger_method, debug_trigger_path, debug_trigger_payload,
-		        meta, created_at, updated_at
-		 FROM interfaces WHERE id=$1 AND project_id=$2`, id, pid,
-	).Scan(&iface.ID, &iface.ProjectID, &iface.Name, &iface.Description,
-		&iface.InterfaceType, &iface.Status, &iface.SenderSystemID,
-		&iface.CpiPackageID, &iface.CpiIflowID, &iface.Transport, &iface.AuthType,
-		&iface.FirewallZone, &iface.CredentialAlias,
-		&iface.DebugTriggerEnabled, &iface.DebugTriggerMethod,
-		&iface.DebugTriggerPath, &iface.DebugTriggerPayload,
-		&rawMeta, &iface.CreatedAt, &iface.UpdatedAt)
+	iface, err := scanInterface(h.pool.QueryRow(r.Context(),
+		`SELECT `+ifaceCols+` FROM interfaces WHERE id=$1 AND project_id=$2`, id, pid).Scan)
 	if err != nil {
 		if isNotFound(err) {
 			apiError(w, 404, "not found")
@@ -132,21 +118,15 @@ func (h *Handler) getInterface(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 500, "internal error")
 		return
 	}
-	if err := json.Unmarshal(rawMeta, &iface.Meta); err != nil {
-		iface.Meta = map[string]string{}
-	}
 
 	rrows, err := h.pool.Query(r.Context(),
-		`SELECT id, interface_id, system_id, cpi_iflow_id, transport, auth_type,
-		        firewall_zone, credential_alias, meta, created_at
-		 FROM interface_receivers WHERE interface_id=$1 ORDER BY created_at`, id)
+		`SELECT `+recvCols+` FROM interface_receivers WHERE interface_id=$1 ORDER BY created_at`, id)
 	if err != nil {
 		h.log.Error("list receivers", "error", err)
 		apiError(w, 500, "internal error")
 		return
 	}
 	defer rrows.Close()
-	iface.Receivers = []Receiver{}
 	for rrows.Next() {
 		rec, err := scanReceiver(rrows.Scan)
 		if err != nil {
@@ -156,7 +136,6 @@ func (h *Handler) getInterface(w http.ResponseWriter, r *http.Request) {
 		}
 		iface.Receivers = append(iface.Receivers, rec)
 	}
-
 	jsonResp(w, 200, iface)
 }
 
@@ -171,46 +150,32 @@ func (h *Handler) createInterface(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, "name is required")
 		return
 	}
-	if body.InterfaceType == "" {
-		body.InterfaceType = "point_to_point"
-	}
-	if body.Status == "" {
-		body.Status = "design"
-	}
-	if body.Meta == nil {
-		body.Meta = map[string]string{}
-	}
+	if body.InterfaceType == "" { body.InterfaceType = "point_to_point" }
+	if body.Status == ""        { body.Status = "design" }
+	if body.EdgeStyle == ""     { body.EdgeStyle = "solid" }
+	if body.EdgeRouting == ""   { body.EdgeRouting = "bezier" }
+	if body.Meta == nil         { body.Meta = map[string]string{} }
 	metaJSON, _ := json.Marshal(body.Meta)
 
-	var iface Interface
-	err := h.pool.QueryRow(r.Context(),
+	iface, err := scanInterface(h.pool.QueryRow(r.Context(),
 		`INSERT INTO interfaces
-		   (project_id, name, description, interface_type, status, sender_system_id,
-		    cpi_package_id, cpi_iflow_id, transport, auth_type, firewall_zone, credential_alias,
-		    debug_trigger_enabled, debug_trigger_method, debug_trigger_path, debug_trigger_payload, meta)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-		 RETURNING id, project_id, name, description, interface_type, status, sender_system_id,
-		           cpi_package_id, cpi_iflow_id, transport, auth_type, firewall_zone, credential_alias,
-		           debug_trigger_enabled, debug_trigger_method, debug_trigger_path, debug_trigger_payload,
-		           meta, created_at, updated_at`,
+		 (project_id, name, description, interface_type, status, sender_system_id,
+		  integration_platform, cpi_package_id, cpi_iflow_id, transport, auth_type, credential_alias,
+		  edge_style, edge_routing,
+		  debug_trigger_enabled, debug_trigger_method, debug_trigger_path, debug_trigger_payload, meta)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+		 RETURNING `+ifaceCols,
 		pid, body.Name, body.Description, body.InterfaceType, body.Status, body.SenderSystemID,
-		body.CpiPackageID, body.CpiIflowID, body.Transport, body.AuthType,
-		body.FirewallZone, body.CredentialAlias,
+		body.IntegrationPlatform, body.CpiPackageID, body.CpiIflowID, body.Transport, body.AuthType, body.CredentialAlias,
+		body.EdgeStyle, body.EdgeRouting,
 		body.DebugTriggerEnabled, body.DebugTriggerMethod, body.DebugTriggerPath, body.DebugTriggerPayload,
 		metaJSON,
-	).Scan(&iface.ID, &iface.ProjectID, &iface.Name, &iface.Description,
-		&iface.InterfaceType, &iface.Status, &iface.SenderSystemID,
-		&iface.CpiPackageID, &iface.CpiIflowID, &iface.Transport, &iface.AuthType,
-		&iface.FirewallZone, &iface.CredentialAlias,
-		&iface.DebugTriggerEnabled, &iface.DebugTriggerMethod,
-		&iface.DebugTriggerPath, &iface.DebugTriggerPayload,
-		&metaJSON, &iface.CreatedAt, &iface.UpdatedAt)
+	).Scan)
 	if err != nil {
 		h.log.Error("create interface", "error", err)
 		apiError(w, 500, "internal error")
 		return
 	}
-	json.Unmarshal(metaJSON, &iface.Meta) //nolint:errcheck
 	iface.Receivers = []Receiver{}
 	jsonResp(w, 201, iface)
 }
@@ -223,38 +188,28 @@ func (h *Handler) updateInterface(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, "invalid body")
 		return
 	}
-	if body.Meta == nil {
-		body.Meta = map[string]string{}
-	}
+	if body.Meta == nil { body.Meta = map[string]string{} }
 	metaJSON, _ := json.Marshal(body.Meta)
 
-	var iface Interface
-	err := h.pool.QueryRow(r.Context(),
+	iface, err := scanInterface(h.pool.QueryRow(r.Context(),
 		`UPDATE interfaces SET
-		   name=$1, description=$2, interface_type=$3, status=$4, sender_system_id=$5,
-		   cpi_package_id=$6, cpi_iflow_id=$7, transport=$8, auth_type=$9,
-		   firewall_zone=$10, credential_alias=$11,
-		   debug_trigger_enabled=$12, debug_trigger_method=$13,
-		   debug_trigger_path=$14, debug_trigger_payload=$15,
-		   meta=$16, updated_at=now()
-		 WHERE id=$17 AND project_id=$18
-		 RETURNING id, project_id, name, description, interface_type, status, sender_system_id,
-		           cpi_package_id, cpi_iflow_id, transport, auth_type, firewall_zone, credential_alias,
-		           debug_trigger_enabled, debug_trigger_method, debug_trigger_path, debug_trigger_payload,
-		           meta, created_at, updated_at`,
+		 name=$1, description=$2, interface_type=$3, status=$4, sender_system_id=$5,
+		 integration_platform=$6, cpi_package_id=$7, cpi_iflow_id=$8, transport=$9,
+		 auth_type=$10, credential_alias=$11,
+		 edge_style=$12, edge_routing=$13,
+		 debug_trigger_enabled=$14, debug_trigger_method=$15,
+		 debug_trigger_path=$16, debug_trigger_payload=$17,
+		 meta=$18, updated_at=now()
+		 WHERE id=$19 AND project_id=$20
+		 RETURNING `+ifaceCols,
 		body.Name, body.Description, body.InterfaceType, body.Status, body.SenderSystemID,
-		body.CpiPackageID, body.CpiIflowID, body.Transport, body.AuthType,
-		body.FirewallZone, body.CredentialAlias,
+		body.IntegrationPlatform, body.CpiPackageID, body.CpiIflowID, body.Transport,
+		body.AuthType, body.CredentialAlias,
+		body.EdgeStyle, body.EdgeRouting,
 		body.DebugTriggerEnabled, body.DebugTriggerMethod,
 		body.DebugTriggerPath, body.DebugTriggerPayload,
 		metaJSON, id, pid,
-	).Scan(&iface.ID, &iface.ProjectID, &iface.Name, &iface.Description,
-		&iface.InterfaceType, &iface.Status, &iface.SenderSystemID,
-		&iface.CpiPackageID, &iface.CpiIflowID, &iface.Transport, &iface.AuthType,
-		&iface.FirewallZone, &iface.CredentialAlias,
-		&iface.DebugTriggerEnabled, &iface.DebugTriggerMethod,
-		&iface.DebugTriggerPath, &iface.DebugTriggerPayload,
-		&metaJSON, &iface.CreatedAt, &iface.UpdatedAt)
+	).Scan)
 	if err != nil {
 		if isNotFound(err) {
 			apiError(w, 404, "not found")
@@ -264,16 +219,11 @@ func (h *Handler) updateInterface(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 500, "internal error")
 		return
 	}
-	json.Unmarshal(metaJSON, &iface.Meta) //nolint:errcheck
 
-	// Return with receivers
 	rrows, err := h.pool.Query(r.Context(),
-		`SELECT id, interface_id, system_id, cpi_iflow_id, transport, auth_type,
-		        firewall_zone, credential_alias, meta, created_at
-		 FROM interface_receivers WHERE interface_id=$1 ORDER BY created_at`, id)
+		`SELECT `+recvCols+` FROM interface_receivers WHERE interface_id=$1 ORDER BY created_at`, id)
 	if err == nil {
 		defer rrows.Close()
-		iface.Receivers = []Receiver{}
 		for rrows.Next() {
 			rec, err := scanReceiver(rrows.Scan)
 			if err == nil {
@@ -310,29 +260,21 @@ func (h *Handler) addReceiver(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, "invalid body")
 		return
 	}
-	if body.Meta == nil {
-		body.Meta = map[string]string{}
-	}
+	if body.Meta == nil { body.Meta = map[string]string{} }
 	metaJSON, _ := json.Marshal(body.Meta)
 
-	var rec Receiver
-	var rawMeta json.RawMessage
-	err := h.pool.QueryRow(r.Context(),
+	rec, err := scanReceiver(h.pool.QueryRow(r.Context(),
 		`INSERT INTO interface_receivers
-		   (interface_id, system_id, cpi_iflow_id, transport, auth_type, firewall_zone, credential_alias, meta)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-		 RETURNING id, interface_id, system_id, cpi_iflow_id, transport, auth_type,
-		           firewall_zone, credential_alias, meta, created_at`,
-		ifaceID, body.SystemID, body.CpiIflowID, body.Transport, body.AuthType,
-		body.FirewallZone, body.CredentialAlias, metaJSON,
-	).Scan(&rec.ID, &rec.InterfaceID, &rec.SystemID, &rec.CpiIflowID, &rec.Transport,
-		&rec.AuthType, &rec.FirewallZone, &rec.CredentialAlias, &rawMeta, &rec.CreatedAt)
+		 (interface_id, system_id, cpi_iflow_id, transport, auth_type, credential_alias, meta)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7)
+		 RETURNING `+recvCols,
+		ifaceID, body.SystemID, body.CpiIflowID, body.Transport, body.AuthType, body.CredentialAlias, metaJSON,
+	).Scan)
 	if err != nil {
 		h.log.Error("add receiver", "error", err)
 		apiError(w, 500, "internal error")
 		return
 	}
-	json.Unmarshal(rawMeta, &rec.Meta) //nolint:errcheck
 	jsonResp(w, 201, rec)
 }
 
@@ -343,24 +285,16 @@ func (h *Handler) updateReceiver(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, "invalid body")
 		return
 	}
-	if body.Meta == nil {
-		body.Meta = map[string]string{}
-	}
+	if body.Meta == nil { body.Meta = map[string]string{} }
 	metaJSON, _ := json.Marshal(body.Meta)
 
-	var rec Receiver
-	var rawMeta json.RawMessage
-	err := h.pool.QueryRow(r.Context(),
+	rec, err := scanReceiver(h.pool.QueryRow(r.Context(),
 		`UPDATE interface_receivers SET
-		   system_id=$1, cpi_iflow_id=$2, transport=$3, auth_type=$4,
-		   firewall_zone=$5, credential_alias=$6, meta=$7
-		 WHERE id=$8
-		 RETURNING id, interface_id, system_id, cpi_iflow_id, transport, auth_type,
-		           firewall_zone, credential_alias, meta, created_at`,
-		body.SystemID, body.CpiIflowID, body.Transport, body.AuthType,
-		body.FirewallZone, body.CredentialAlias, metaJSON, rid,
-	).Scan(&rec.ID, &rec.InterfaceID, &rec.SystemID, &rec.CpiIflowID, &rec.Transport,
-		&rec.AuthType, &rec.FirewallZone, &rec.CredentialAlias, &rawMeta, &rec.CreatedAt)
+		 system_id=$1, cpi_iflow_id=$2, transport=$3, auth_type=$4, credential_alias=$5, meta=$6
+		 WHERE id=$7
+		 RETURNING `+recvCols,
+		body.SystemID, body.CpiIflowID, body.Transport, body.AuthType, body.CredentialAlias, metaJSON, rid,
+	).Scan)
 	if err != nil {
 		if isNotFound(err) {
 			apiError(w, 404, "not found")
@@ -370,14 +304,12 @@ func (h *Handler) updateReceiver(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 500, "internal error")
 		return
 	}
-	json.Unmarshal(rawMeta, &rec.Meta) //nolint:errcheck
 	jsonResp(w, 200, rec)
 }
 
 func (h *Handler) deleteReceiver(w http.ResponseWriter, r *http.Request) {
 	rid := r.PathValue("rid")
-	res, err := h.pool.Exec(r.Context(),
-		`DELETE FROM interface_receivers WHERE id=$1`, rid)
+	res, err := h.pool.Exec(r.Context(), `DELETE FROM interface_receivers WHERE id=$1`, rid)
 	if err != nil {
 		h.log.Error("delete receiver", "error", err)
 		apiError(w, 500, "internal error")
@@ -398,12 +330,14 @@ type interfaceBody struct {
 	InterfaceType       string            `json:"interface_type"`
 	Status              string            `json:"status"`
 	SenderSystemID      *string           `json:"sender_system_id"`
+	IntegrationPlatform string            `json:"integration_platform"`
 	CpiPackageID        string            `json:"cpi_package_id"`
 	CpiIflowID          string            `json:"cpi_iflow_id"`
 	Transport           string            `json:"transport"`
 	AuthType            string            `json:"auth_type"`
-	FirewallZone        string            `json:"firewall_zone"`
 	CredentialAlias     string            `json:"credential_alias"`
+	EdgeStyle           string            `json:"edge_style"`
+	EdgeRouting         string            `json:"edge_routing"`
 	DebugTriggerEnabled bool              `json:"debug_trigger_enabled"`
 	DebugTriggerMethod  string            `json:"debug_trigger_method"`
 	DebugTriggerPath    string            `json:"debug_trigger_path"`
@@ -416,7 +350,6 @@ type receiverBody struct {
 	CpiIflowID      string            `json:"cpi_iflow_id"`
 	Transport       string            `json:"transport"`
 	AuthType        string            `json:"auth_type"`
-	FirewallZone    string            `json:"firewall_zone"`
 	CredentialAlias string            `json:"credential_alias"`
 	Meta            map[string]string `json:"meta"`
 }
@@ -431,8 +364,9 @@ func scanInterface(scan scanFn) (Interface, error) {
 	err := scan(
 		&iface.ID, &iface.ProjectID, &iface.Name, &iface.Description,
 		&iface.InterfaceType, &iface.Status, &iface.SenderSystemID,
-		&iface.CpiPackageID, &iface.CpiIflowID, &iface.Transport, &iface.AuthType,
-		&iface.FirewallZone, &iface.CredentialAlias,
+		&iface.IntegrationPlatform, &iface.CpiPackageID, &iface.CpiIflowID,
+		&iface.Transport, &iface.AuthType, &iface.CredentialAlias,
+		&iface.EdgeStyle, &iface.EdgeRouting,
 		&iface.DebugTriggerEnabled, &iface.DebugTriggerMethod,
 		&iface.DebugTriggerPath, &iface.DebugTriggerPayload,
 		&rawMeta, &iface.CreatedAt, &iface.UpdatedAt,
@@ -451,8 +385,8 @@ func scanReceiver(scan scanFn) (Receiver, error) {
 	var rec Receiver
 	var rawMeta json.RawMessage
 	err := scan(
-		&rec.ID, &rec.InterfaceID, &rec.SystemID, &rec.CpiIflowID, &rec.Transport,
-		&rec.AuthType, &rec.FirewallZone, &rec.CredentialAlias, &rawMeta, &rec.CreatedAt,
+		&rec.ID, &rec.InterfaceID, &rec.SystemID, &rec.CpiIflowID,
+		&rec.Transport, &rec.AuthType, &rec.CredentialAlias, &rawMeta, &rec.CreatedAt,
 	)
 	if err != nil {
 		return rec, err
