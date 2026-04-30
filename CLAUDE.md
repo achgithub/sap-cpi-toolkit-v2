@@ -146,6 +146,11 @@ Per-fragment variants with project scoping. Global defaults seeded on startup (1
 - Global defaults: Toolbox → Adapter Templates
 - Project overrides: Design → Templates tab
 
+## TODO
+
+- [ ] E2E tests
+- [ ] Interface registry — table view (alongside the diagram, showing all interfaces in a sortable/filterable grid)
+
 ## Key Architecture Decisions
 
 - **Auth bypass**: Only active when `DEPLOYMENT_ENV=local` AND `AUTH_BYPASS_ENABLED=true`.
