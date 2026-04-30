@@ -39,23 +39,26 @@ function buildGraph(
   g.setGraph({ rankdir: 'LR', ranksep: 220, nodesep: 80, marginx: 40, marginy: 40 })
   systems.forEach(s => g.setNode(s.id, { width: NODE_W, height: NODE_H }))
 
-  // Build undirected pair map — one entry per unique system pair
-  const pairMap = new Map<string, string[]>() // key → interface ids
+  // Build undirected pair map — one entry per unique system pair.
+  // Key is sorted for deduplication; source/target preserve original direction
+  // so edges always go sender→receiver (avoids backwards bezier loops).
+  const pairMap = new Map<string, { ifaceIds: string[]; source: string; target: string }>()
   interfaces.forEach(iface => {
     if (!iface.sender_system_id) return
     iface.receivers.forEach(rec => {
       if (!rec.system_id) return
       const key = pairKey(iface.sender_system_id!, rec.system_id)
       if (!key) return
-      if (!pairMap.has(key)) pairMap.set(key, [])
-      pairMap.get(key)!.push(iface.id)
+      if (!pairMap.has(key)) {
+        pairMap.set(key, { ifaceIds: [], source: iface.sender_system_id!, target: rec.system_id })
+      }
+      pairMap.get(key)!.ifaceIds.push(iface.id)
     })
   })
 
   // Feed edges into Dagre so it can rank nodes correctly
-  pairMap.forEach((_, key) => {
-    const [a, b] = key.split('__')
-    if (g.hasNode(a) && g.hasNode(b)) g.setEdge(a, b)
+  pairMap.forEach(({ source, target }) => {
+    if (g.hasNode(source) && g.hasNode(target)) g.setEdge(source, target)
   })
   dagre.layout(g)
 
@@ -74,16 +77,14 @@ function buildGraph(
     }
   })
 
-  const edges: Edge[] = Array.from(pairMap.entries()).map(([key, ifaceIds]) => {
-    const [source, target] = key.split('__')
+  const edges: Edge[] = Array.from(pairMap.entries()).map(([key, { ifaceIds, source, target }]) => {
     const highlighted = key === clickedKey
     return {
       id: `e-${key}`,
       source,
       target,
-      type: 'default',
+      type: 'straight',
       data: { ifaceIds, key },
-      // No markerEnd → no arrows
       style: {
         stroke: highlighted ? 'var(--sapHighlightColor)' : '#aaa',
         strokeWidth: highlighted ? 2.5 : 1.5,
