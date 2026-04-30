@@ -45,15 +45,19 @@ function FloatingEdge({ id, source, target, style, label, labelStyle, labelBgSty
   const targetNode = useInternalNode(target)
   if (!sourceNode || !targetNode) return null
 
+  const srcPos = sourceNode.internals?.positionAbsolute
+  const tgtPos = targetNode.internals?.positionAbsolute
+  if (!srcPos || !tgtPos) return null
+
   const sw = sourceNode.measured?.width  ?? NODE_W
   const sh = sourceNode.measured?.height ?? NODE_H
   const tw = targetNode.measured?.width  ?? NODE_W
   const th = targetNode.measured?.height ?? NODE_H
 
-  const scx = sourceNode.internals.positionAbsolute.x + sw / 2
-  const scy = sourceNode.internals.positionAbsolute.y + sh / 2
-  const tcx = targetNode.internals.positionAbsolute.x + tw / 2
-  const tcy = targetNode.internals.positionAbsolute.y + th / 2
+  const scx = srcPos.x + sw / 2
+  const scy = srcPos.y + sh / 2
+  const tcx = tgtPos.x + tw / 2
+  const tcy = tgtPos.y + th / 2
 
   const src = getBorderPoint(scx, scy, tcx, tcy, sw, sh)
   const tgt = getBorderPoint(tcx, tcy, scx, scy, tw, th)
@@ -131,8 +135,8 @@ function buildGraph(
       type: 'floating',
       data: { ifaceIds, key },
       style: {
-        stroke: highlighted ? 'var(--sapHighlightColor)' : '#aaa',
-        strokeWidth: highlighted ? 2.5 : 1.5,
+        stroke: highlighted ? 'var(--sapHighlightColor)' : '#666',
+        strokeWidth: highlighted ? 3 : 2,
       },
       label: ifaceIds.length > 1 ? `${ifaceIds.length}` : undefined,
       labelStyle: {
