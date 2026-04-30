@@ -21,115 +21,103 @@ interface Props {
 const NODE_W = 140
 const NODE_H = 90
 
-// Derive a stable stroke-dasharray from edge_style
-function dashArray(style: string): string | undefined {
-  if (style === 'dashed') return '8 4'
-  if (style === 'dotted') return '2 4'
-  return undefined
-}
-
-// Pick the React Flow edge type from edge_routing
-function edgeType(routing: string): string {
-  if (routing === 'straight')   return 'straight'
-  if (routing === 'smoothstep') return 'smoothstep'
-  return 'default' // bezier
-}
-
-function buildLayout(systems: IFSystem[]) {
-  const g = new dagre.graphlib.Graph()
-  g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: 'LR', ranksep: 160, nodesep: 80 })
-  systems.forEach(s => g.setNode(s.id, { width: NODE_W, height: NODE_H }))
-  // Add a dummy edge for each unique sender→all-receivers pair so Dagre has structure
-  dagre.layout(g)
-  return g
+// Normalise a system pair to a single undirected key so A→B and B→A share one edge.
+// Returns null if both IDs are the same (self-loop — skip).
+function pairKey(a: string, b: string): string | null {
+  if (a === b) return null
+  return [a, b].sort().join('__')
 }
 
 function buildGraph(
   systems: IFSystem[],
   interfaces: IFInterface[],
   config: RegistryConfig,
-  selectedIfaceId: string | null,
+  clickedKey: string | null,
 ) {
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: 'LR', ranksep: 160, nodesep: 80 })
+  g.setGraph({ rankdir: 'LR', ranksep: 220, nodesep: 80, marginx: 40, marginy: 40 })
   systems.forEach(s => g.setNode(s.id, { width: NODE_W, height: NODE_H }))
 
-  const pairMap = new Map<string, string[]>()
+  // Build undirected pair map — one entry per unique system pair
+  const pairMap = new Map<string, string[]>() // key → interface ids
   interfaces.forEach(iface => {
     if (!iface.sender_system_id) return
     iface.receivers.forEach(rec => {
       if (!rec.system_id) return
-      const key = `${iface.sender_system_id}__${rec.system_id}`
+      const key = pairKey(iface.sender_system_id!, rec.system_id)
+      if (!key) return
       if (!pairMap.has(key)) pairMap.set(key, [])
       pairMap.get(key)!.push(iface.id)
     })
   })
+
+  // Feed edges into Dagre so it can rank nodes correctly
   pairMap.forEach((_, key) => {
-    const [src, tgt] = key.split('__')
-    if (g.hasNode(src) && g.hasNode(tgt)) g.setEdge(src, tgt)
+    const [a, b] = key.split('__')
+    if (g.hasNode(a) && g.hasNode(b)) g.setEdge(a, b)
   })
   dagre.layout(g)
 
   const nodes: Node[] = systems.map(s => {
-    const n     = g.node(s.id) ?? { x: 0, y: 0 }
+    const n = g.node(s.id) ?? { x: 0, y: 0 }
     const color = getSystemColor(s.system_type, config)
     const hasSavedPos = s.pos_x !== 0 || s.pos_y !== 0
     return {
       id: s.id,
-      position: hasSavedPos ? { x: s.pos_x, y: s.pos_y } : { x: n.x - NODE_W / 2, y: n.y - NODE_H / 2 },
+      position: hasSavedPos
+        ? { x: s.pos_x, y: s.pos_y }
+        : { x: n.x - NODE_W / 2, y: n.y - NODE_H / 2 },
       data: { system: s, color },
       type: 'systemNode',
       style: { width: NODE_W, height: NODE_H },
     }
   })
 
-  // Build one edge per system pair; use the style/routing of the first interface on that pair
   const edges: Edge[] = Array.from(pairMap.entries()).map(([key, ifaceIds]) => {
     const [source, target] = key.split('__')
-    // Dominant interface = first active one, else first
-    const dominant = interfaces.find(i => ifaceIds.includes(i.id) && i.status === 'active')
-      ?? interfaces.find(i => ifaceIds.includes(i.id))
-    const selected = selectedIfaceId && ifaceIds.includes(selectedIfaceId)
-    const stroke   = selected ? '#0070f2' : '#888'
-    const da       = dominant ? dashArray(dominant.edge_style) : undefined
-    const etype    = dominant ? edgeType(dominant.edge_routing) : 'default'
+    const highlighted = key === clickedKey
     return {
       id: `e-${key}`,
       source,
       target,
-      type: etype,
-      data: { ifaceIds },
+      type: 'smoothstep',
+      data: { ifaceIds, key },
+      // No markerEnd → no arrows
       style: {
-        stroke,
-        strokeWidth: selected ? 3 : 2,
-        strokeDasharray: da,
+        stroke: highlighted ? 'var(--sapHighlightColor)' : '#aaa',
+        strokeWidth: highlighted ? 2.5 : 1.5,
       },
       label: ifaceIds.length > 1 ? `${ifaceIds.length}` : undefined,
-      labelStyle: { fontSize: '0.7rem', fill: 'var(--sapTextColor)', fontFamily: 'var(--sapFontFamily)' },
+      labelStyle: {
+        fontSize: '0.68rem', fill: 'var(--sapContent_LabelColor)',
+        fontFamily: 'var(--sapFontFamily)', fontWeight: 600,
+      },
       labelBgStyle: { fill: 'var(--sapTile_Background)', fillOpacity: 0.9 },
-      markerEnd: { type: 'arrowclosed' as const, color: stroke },
     }
   })
 
-  return { nodes, edges, pairMap }
+  return { nodes, edges }
 }
 
-// Custom square node renderer
+// ── Custom node ───────────────────────────────────────────────────────────────
+
+// Left/right handles only — forces edges to stay horizontal between Dagre ranks.
+// display:none keeps them invisible while remaining functional for edge routing.
+const HIDDEN: React.CSSProperties = { display: 'none' }
+
 function SystemNode({ data }: { data: { system: IFSystem; color: string } }) {
   const { system: s, color } = data
   const infraLine = [s.infra_type, s.infra_region].filter(Boolean).join(' · ')
-  const handleStyle = { background: color, border: 'none', width: '8px', height: '8px' }
   return (
     <>
-      <Handle type="target" position={Position.Left}  style={handleStyle} />
-      <Handle type="source" position={Position.Right} style={handleStyle} />
+      <Handle type="target" position={Position.Left}  style={HIDDEN} id="l" />
+      <Handle type="source" position={Position.Right} style={HIDDEN} id="r" />
       <div style={{
         width: '100%', height: '100%', boxSizing: 'border-box',
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         background: 'var(--sapTile_Background)',
-        border: `1px solid var(--sapList_BorderColor)`,
+        border: '1px solid var(--sapList_BorderColor)',
         borderTop: `4px solid ${color}`,
         borderRadius: '6px',
         padding: '8px 10px',
@@ -167,10 +155,13 @@ function SystemNode({ data }: { data: { system: IFSystem; color: string } }) {
 
 const NODE_TYPES = { systemNode: SystemNode }
 
+// ── Canvas ────────────────────────────────────────────────────────────────────
+
 export default function DiagramCanvas({ systems, interfaces, config, selectedIfaceId, onSelectIface, onNodeMoved }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; ifaceIds: string[] } | null>(null)
+  const [clickedKey, setClickedKey]     = useState<string | null>(null)
+  const [popup, setPopup]               = useState<{ x: number; y: number; ifaceIds: string[] } | null>(null)
 
   const ifaceIndex = useMemo(() => {
     const m = new Map<string, IFInterface>()
@@ -178,84 +169,54 @@ export default function DiagramCanvas({ systems, interfaces, config, selectedIfa
     return m
   }, [interfaces])
 
-  const rebuildGraph = useCallback(() => {
-    const { nodes: n, edges: e } = buildGraph(systems, interfaces, config, selectedIfaceId)
+  useEffect(() => {
+    const { nodes: n, edges: e } = buildGraph(systems, interfaces, config, clickedKey)
     setNodes(n)
     setEdges(e)
-  }, [systems, interfaces, config, selectedIfaceId])
+  }, [systems, interfaces, config])
 
-  useEffect(() => { rebuildGraph() }, [systems, interfaces, config])
-
-  // Re-colour/style edges when selection changes without rebuilding positions
+  // Re-highlight edges on selection change without resetting node positions
   useEffect(() => {
     setEdges(prev => prev.map(e => {
-      const ifaceIds = (e.data?.ifaceIds as string[]) ?? []
-      const selected = selectedIfaceId && ifaceIds.includes(selectedIfaceId)
-      const stroke   = selected ? '#0070f2' : '#888'
-      const dominant = interfaces.find(i => ifaceIds.includes(i.id) && i.status === 'active')
-        ?? interfaces.find(i => ifaceIds.includes(i.id))
-      const da = dominant ? dashArray(dominant.edge_style) : undefined
+      const highlighted = (e.data?.key as string) === clickedKey
       return {
         ...e,
-        style: { ...e.style as React.CSSProperties, stroke, strokeWidth: selected ? 3 : 2, strokeDasharray: da },
-        markerEnd: { type: 'arrowclosed' as const, color: stroke },
+        style: {
+          stroke: highlighted ? 'var(--sapHighlightColor)' : '#aaa',
+          strokeWidth: highlighted ? 2.5 : 1.5,
+        },
       }
     }))
-  }, [selectedIfaceId])
-
-  function redraw() {
-    // Reset all positions then re-layout with Dagre
-    const g = buildLayout(systems)
-    setNodes(prev => prev.map(n => {
-      const gn = g.node(n.id)
-      if (!gn) return n
-      return { ...n, position: { x: gn.x - NODE_W / 2, y: gn.y - NODE_H / 2 } }
-    }))
-    // Persist cleared positions
-    systems.forEach(s => onNodeMoved(s.id, 0, 0))
-  }
+  }, [clickedKey])
 
   const onNodeDragStop: NodeMouseHandler = useCallback((_evt, node) => {
     onNodeMoved(node.id, node.position.x, node.position.y)
   }, [onNodeMoved])
 
-  const onEdgeMouseEnter = useCallback((evt: React.MouseEvent, edge: Edge) => {
-    const rect = (evt.currentTarget as HTMLElement).closest('.react-flow')?.getBoundingClientRect()
-    setTooltip({
-      x: evt.clientX - (rect?.left ?? 0),
-      y: evt.clientY - (rect?.top ?? 0),
-      ifaceIds: (edge.data?.ifaceIds as string[]) ?? [],
-    })
+  const onEdgeClick = useCallback((evt: React.MouseEvent, edge: Edge) => {
+    evt.stopPropagation()
+    const key      = edge.data?.key as string
+    const ifaceIds = (edge.data?.ifaceIds as string[]) ?? []
+    const rect     = (evt.currentTarget as HTMLElement).closest('.react-flow')?.getBoundingClientRect()
+
+    // Toggle off if clicking the same edge twice
+    if (clickedKey === key) {
+      setClickedKey(null); setPopup(null); return
+    }
+
+    setClickedKey(key)
+    setPopup({ x: evt.clientX - (rect?.left ?? 0), y: evt.clientY - (rect?.top ?? 0), ifaceIds })
+
+    // Auto-open detail if only one interface on this connection
+    if (ifaceIds.length === 1) onSelectIface(ifaceIds[0])
+  }, [clickedKey, onSelectIface])
+
+  const onPaneClick = useCallback(() => {
+    setClickedKey(null); setPopup(null)
   }, [])
-
-  const onEdgeMouseLeave = useCallback(() => setTooltip(null), [])
-
-  const onEdgeClick = useCallback((_evt: React.MouseEvent, edge: Edge) => {
-    const ids = (edge.data?.ifaceIds as string[]) ?? []
-    if (ids.length === 1) onSelectIface(ids[0])
-  }, [onSelectIface])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      {/* Toolbar */}
-      <div style={{
-        position: 'absolute', top: '10px', left: '10px', zIndex: 10,
-        display: 'flex', gap: '6px',
-      }}>
-        <button
-          onClick={redraw}
-          title="Re-run auto-layout (resets manual positions)"
-          style={{
-            padding: '4px 10px', border: '1px solid var(--sapList_BorderColor)',
-            borderRadius: '4px', background: 'var(--sapTile_Background)',
-            fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem',
-            color: 'var(--sapTextColor)', cursor: 'pointer',
-          }}
-        >
-          ↺ Redraw
-        </button>
-      </div>
-
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -263,13 +224,12 @@ export default function DiagramCanvas({ systems, interfaces, config, selectedIfa
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeDragStop={onNodeDragStop}
-        onEdgeMouseEnter={onEdgeMouseEnter}
-        onEdgeMouseLeave={onEdgeMouseLeave}
         onEdgeClick={onEdgeClick}
+        onPaneClick={onPaneClick}
         snapToGrid
         snapGrid={[20, 20]}
         fitView
-        fitViewOptions={{ padding: 0.25 }}
+        fitViewOptions={{ padding: 0.3 }}
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={20} color="var(--sapList_BorderColor)" />
@@ -281,32 +241,52 @@ export default function DiagramCanvas({ systems, interfaces, config, selectedIfa
         />
       </ReactFlow>
 
-      {tooltip && tooltip.ifaceIds.length > 0 && (
+      {/* Click popup listing interfaces on this connection */}
+      {popup && popup.ifaceIds.length > 0 && (
         <div style={{
-          position: 'absolute', left: tooltip.x + 12, top: tooltip.y - 8,
-          background: 'var(--sapTile_Background)', border: '1px solid var(--sapList_BorderColor)',
-          borderRadius: '4px', padding: '8px 12px', zIndex: 100, pointerEvents: 'none',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.15)', minWidth: '160px',
+          position: 'absolute',
+          left: popup.x + 12,
+          top: popup.y - 8,
+          background: 'var(--sapTile_Background)',
+          border: '1px solid var(--sapList_BorderColor)',
+          borderRadius: '6px',
+          zIndex: 100,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+          minWidth: '200px',
+          overflow: 'hidden',
         }}>
-          <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)', marginBottom: '4px' }}>
-            Interfaces
+          <div style={{
+            padding: '6px 12px',
+            background: 'var(--sapGroup_TitleBackground)',
+            borderBottom: '1px solid var(--sapList_BorderColor)',
+            fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem',
+            color: 'var(--sapContent_LabelColor)', fontWeight: 600,
+          }}>
+            {popup.ifaceIds.length === 1 ? 'Interface' : `${popup.ifaceIds.length} Interfaces`}
           </div>
-          {tooltip.ifaceIds.map(id => {
+          {popup.ifaceIds.map(id => {
             const iface = ifaceIndex.get(id)
             if (!iface) return null
+            const active = selectedIfaceId === id
             return (
-              <div key={id} style={{
-                fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem',
-                color: 'var(--sapTextColor)', padding: '2px 0',
-                display: 'flex', alignItems: 'center', gap: '6px',
-              }}>
-                <span style={{
-                  width: '7px', height: '7px', borderRadius: '50%', flexShrink: 0,
-                  background: STATUS_COLORS[iface.status] ?? '#888',
-                }} />
-                {iface.name}
+              <div
+                key={id}
+                onClick={() => { onSelectIface(id); setPopup(null); setClickedKey(null) }}
+                style={{
+                  padding: '7px 12px', cursor: 'pointer',
+                  borderBottom: '1px solid var(--sapList_BorderColor)',
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  background: active ? 'var(--sapList_SelectionBackgroundColor)' : 'transparent',
+                }}
+                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLDivElement).style.background = 'var(--sapList_Hover_Background)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = active ? 'var(--sapList_SelectionBackgroundColor)' : 'transparent' }}
+              >
+                <span style={{ width: '7px', height: '7px', borderRadius: '50%', flexShrink: 0, background: STATUS_COLORS[iface.status] ?? '#888' }} />
+                <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapTextColor)', flex: 1 }}>
+                  {iface.name}
+                </span>
                 {iface.integration_platform && (
-                  <span style={{ color: 'var(--sapContent_LabelColor)', fontSize: '0.7rem', marginLeft: 'auto' }}>
+                  <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.68rem', color: 'var(--sapContent_LabelColor)', flexShrink: 0 }}>
                     {iface.integration_platform}
                   </span>
                 )}

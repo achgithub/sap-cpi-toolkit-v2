@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Button, Input, Label, Select, Option, CheckBox, MessageStrip } from '@ui5/webcomponents-react'
+import { Button, Input, Label, Select, Option, MessageStrip } from '@ui5/webcomponents-react'
 import type { IFInterface, IFSystem, IFReceiver, RegistryConfig } from './types'
-import { INTERFACE_TYPES, STATUSES, TRANSPORTS, AUTH_TYPES, EDGE_STYLES, EDGE_ROUTINGS, STATUS_COLORS, TYPE_LABELS } from './types'
+import { INTERFACE_TYPES, STATUSES, TRANSPORTS, AUTH_TYPES, STATUS_COLORS, TYPE_LABELS } from './types'
 
 interface Props {
   iface: IFInterface
@@ -201,47 +201,6 @@ export default function InterfaceDetail({ iface, systems, config, onUpdate, onDe
               </div>
             )}
 
-            {/* Edge appearance */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-              <Field label="Edge Style">
-                <Select value={form.edge_style ?? 'solid'} onChange={e => setForm(f => ({ ...f, edge_style: (e.target as unknown as HTMLSelectElement).value as IFInterface['edge_style'] }))}>
-                  {EDGE_STYLES.map(s => <Option key={s} value={s}>{s}</Option>)}
-                </Select>
-              </Field>
-              <Field label="Edge Routing">
-                <Select value={form.edge_routing ?? 'bezier'} onChange={e => setForm(f => ({ ...f, edge_routing: (e.target as unknown as HTMLSelectElement).value as IFInterface['edge_routing'] }))}>
-                  {EDGE_ROUTINGS.map(r => <Option key={r} value={r}>{r}</Option>)}
-                </Select>
-              </Field>
-            </div>
-
-            {/* Debug trigger */}
-            <div style={{ border: '1px solid var(--sapList_BorderColor)', borderRadius: '4px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <CheckBox
-                checked={form.debug_trigger_enabled}
-                onChange={e => setForm(f => ({ ...f, debug_trigger_enabled: (e.target as unknown as HTMLInputElement).checked }))}
-                text="Debug Trigger"
-              />
-              {form.debug_trigger_enabled && (
-                <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '6px' }}>
-                  <Field label="Method">
-                    <Select value={form.debug_trigger_method} onChange={e => setForm(f => ({ ...f, debug_trigger_method: (e.target as unknown as HTMLSelectElement).value }))}>
-                      <Option value="POST">POST</Option>
-                      <Option value="GET">GET</Option>
-                    </Select>
-                  </Field>
-                  <Field label="Path">
-                    <Input value={form.debug_trigger_path ?? ''} onInput={e => setForm(f => ({ ...f, debug_trigger_path: (e.target as unknown as HTMLInputElement).value }))} placeholder="/debug/my-interface" />
-                  </Field>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <Field label="Payload Template">
-                      <Input value={form.debug_trigger_payload ?? ''} onInput={e => setForm(f => ({ ...f, debug_trigger_payload: (e.target as unknown as HTMLInputElement).value }))} placeholder='{"key":"value"}' />
-                    </Field>
-                  </div>
-                </div>
-              )}
-            </div>
-
             <div>
               <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem', color: 'var(--sapContent_LabelColor)', marginBottom: '4px' }}>Additional Fields</div>
               <MetaEditor meta={form.meta ?? {}} onChange={m => setForm(f => ({ ...f, meta: m }))} />
@@ -268,10 +227,6 @@ export default function InterfaceDetail({ iface, systems, config, onUpdate, onDe
                 {iface.auth_type        && <InfoRow label="Auth">{iface.auth_type}</InfoRow>}
                 {iface.credential_alias && <InfoRow label="Credential Alias">{iface.credential_alias}</InfoRow>}
               </>
-            )}
-            <InfoRow label="Edge">{iface.edge_style} / {iface.edge_routing}</InfoRow>
-            {iface.debug_trigger_enabled && (
-              <InfoRow label="Debug Trigger">{iface.debug_trigger_method} {iface.debug_trigger_path}</InfoRow>
             )}
             {Object.entries(iface.meta ?? {}).map(([k, v]) => (
               <InfoRow key={k} label={k}>{v}</InfoRow>
