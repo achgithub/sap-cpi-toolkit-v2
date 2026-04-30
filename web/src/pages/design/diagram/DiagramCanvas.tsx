@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ReactFlow, Background, Controls, MiniMap,
-  useNodesState, useEdgesState, Handle, Position,
-  type Node, type Edge, type NodeMouseHandler,
+  useNodesState, useEdgesState,
+  useInternalNode, getStraightPath, BaseEdge,
+  type Node, type Edge, type NodeMouseHandler, type EdgeProps,
 } from '@xyflow/react'
 import dagre from '@dagrejs/dagre'
 import '@xyflow/react/dist/style.css'
@@ -21,12 +22,59 @@ interface Props {
 const NODE_W = 140
 const NODE_H = 90
 
-// Normalise a system pair to a single undirected key so A→B and B→A share one edge.
-// Returns null if both IDs are the same (self-loop — skip).
-function pairKey(a: string, b: string): string | null {
-  if (a === b) return null
-  return [a, b].sort().join('__')
+// ── Floating edge ─────────────────────────────────────────────────────────────
+// Finds the closest point on each box's border and draws a straight line.
+// No handles needed — reacts to node position changes automatically.
+
+function getBorderPoint(
+  cx: number, cy: number,   // center of this node
+  tx: number, ty: number,   // center of the other node
+  w: number,  h: number,    // this node's dimensions
+): { x: number; y: number } {
+  const dx = tx - cx
+  const dy = ty - cy
+  if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) return { x: cx, y: cy }
+  const sx = dx !== 0 ? (w / 2) / Math.abs(dx) : Infinity
+  const sy = dy !== 0 ? (h / 2) / Math.abs(dy) : Infinity
+  const s  = Math.min(sx, sy)
+  return { x: cx + dx * s, y: cy + dy * s }
 }
+
+function FloatingEdge({ id, source, target, style, label, labelStyle, labelBgStyle }: EdgeProps) {
+  const sourceNode = useInternalNode(source)
+  const targetNode = useInternalNode(target)
+  if (!sourceNode || !targetNode) return null
+
+  const sw = sourceNode.measured?.width  ?? NODE_W
+  const sh = sourceNode.measured?.height ?? NODE_H
+  const tw = targetNode.measured?.width  ?? NODE_W
+  const th = targetNode.measured?.height ?? NODE_H
+
+  const scx = sourceNode.internals.positionAbsolute.x + sw / 2
+  const scy = sourceNode.internals.positionAbsolute.y + sh / 2
+  const tcx = targetNode.internals.positionAbsolute.x + tw / 2
+  const tcy = targetNode.internals.positionAbsolute.y + th / 2
+
+  const src = getBorderPoint(scx, scy, tcx, tcy, sw, sh)
+  const tgt = getBorderPoint(tcx, tcy, scx, scy, tw, th)
+
+  const [edgePath, lx, ly] = getStraightPath({
+    sourceX: src.x, sourceY: src.y,
+    targetX: tgt.x, targetY: tgt.y,
+  })
+
+  return (
+    <BaseEdge
+      id={id} path={edgePath} style={style}
+      label={label} labelX={lx} labelY={ly}
+      labelStyle={labelStyle} labelBgStyle={labelBgStyle as React.CSSProperties}
+    />
+  )
+}
+
+const EDGE_TYPES = { floating: FloatingEdge }
+
+// ── Graph builder ─────────────────────────────────────────────────────────────
 
 function buildGraph(
   systems: IFSystem[],
@@ -39,31 +87,27 @@ function buildGraph(
   g.setGraph({ rankdir: 'LR', ranksep: 220, nodesep: 80, marginx: 40, marginy: 40 })
   systems.forEach(s => g.setNode(s.id, { width: NODE_W, height: NODE_H }))
 
-  // Build undirected pair map — one entry per unique system pair.
-  // Key is sorted for deduplication; source/target preserve original direction
-  // so edges always go sender→receiver (avoids backwards bezier loops).
-  const pairMap = new Map<string, { ifaceIds: string[]; source: string; target: string }>()
+  // One undirected connection per system pair — direction irrelevant at this level
+  const pairMap = new Map<string, string[]>() // sorted-key → interface ids
   interfaces.forEach(iface => {
     if (!iface.sender_system_id) return
     iface.receivers.forEach(rec => {
-      if (!rec.system_id) return
-      const key = pairKey(iface.sender_system_id!, rec.system_id)
-      if (!key) return
-      if (!pairMap.has(key)) {
-        pairMap.set(key, { ifaceIds: [], source: iface.sender_system_id!, target: rec.system_id })
-      }
-      pairMap.get(key)!.ifaceIds.push(iface.id)
+      if (!rec.system_id || rec.system_id === iface.sender_system_id) return
+      const ids = [iface.sender_system_id!, rec.system_id].sort()
+      const key = ids.join('__')
+      if (!pairMap.has(key)) pairMap.set(key, [])
+      pairMap.get(key)!.push(iface.id)
     })
   })
 
-  // Feed edges into Dagre so it can rank nodes correctly
-  pairMap.forEach(({ source, target }) => {
-    if (g.hasNode(source) && g.hasNode(target)) g.setEdge(source, target)
+  pairMap.forEach((_, key) => {
+    const [a, b] = key.split('__')
+    if (g.hasNode(a) && g.hasNode(b)) g.setEdge(a, b)
   })
   dagre.layout(g)
 
   const nodes: Node[] = systems.map(s => {
-    const n = g.node(s.id) ?? { x: 0, y: 0 }
+    const n     = g.node(s.id) ?? { x: 0, y: 0 }
     const color = getSystemColor(s.system_type, config)
     const hasSavedPos = s.pos_x !== 0 || s.pos_y !== 0
     return {
@@ -77,13 +121,14 @@ function buildGraph(
     }
   })
 
-  const edges: Edge[] = Array.from(pairMap.entries()).map(([key, { ifaceIds, source, target }]) => {
+  const edges: Edge[] = Array.from(pairMap.entries()).map(([key, ifaceIds]) => {
+    const [source, target] = key.split('__')
     const highlighted = key === clickedKey
     return {
       id: `e-${key}`,
       source,
       target,
-      type: 'straight',
+      type: 'floating',
       data: { ifaceIds, key },
       style: {
         stroke: highlighted ? 'var(--sapHighlightColor)' : '#aaa',
@@ -101,59 +146,48 @@ function buildGraph(
   return { nodes, edges }
 }
 
-// ── Custom node ───────────────────────────────────────────────────────────────
-
-// Small neutral handles — visible to the browser (so React Flow can measure them)
-// but subtle enough not to distract. Matches the node border colour.
-const HANDLE: React.CSSProperties = {
-  width: 6, height: 6, border: 'none', borderRadius: '50%',
-  background: 'var(--sapList_BorderColor)',
-}
+// ── System node — no handles needed with floating edges ───────────────────────
 
 function SystemNode({ data }: { data: { system: IFSystem; color: string } }) {
   const { system: s, color } = data
   const infraLine = [s.infra_type, s.infra_region].filter(Boolean).join(' · ')
   return (
-    <>
-      <Handle type="target" position={Position.Left}  style={HANDLE} id="l" />
-      <Handle type="source" position={Position.Right} style={HANDLE} id="r" />
-      <div style={{
-        width: '100%', height: '100%', boxSizing: 'border-box',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--sapTile_Background)',
-        border: '1px solid var(--sapList_BorderColor)',
-        borderTop: `4px solid ${color}`,
-        borderRadius: '6px',
-        padding: '8px 10px',
-        gap: '3px',
+    <div style={{
+      width: '100%', height: '100%', boxSizing: 'border-box',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      background: 'var(--sapTile_Background)',
+      border: '1px solid var(--sapList_BorderColor)',
+      borderTop: `4px solid ${color}`,
+      borderRadius: '6px',
+      padding: '8px 10px',
+      gap: '3px',
+    }}>
+      <span style={{
+        fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', fontWeight: 'bold',
+        color: 'var(--sapTextColor)', textAlign: 'center', lineHeight: 1.25,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%',
       }}>
+        {s.name}
+      </span>
+      {s.system_type && (
         <span style={{
-          fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', fontWeight: 'bold',
-          color: 'var(--sapTextColor)', textAlign: 'center', lineHeight: 1.25,
+          fontFamily: 'var(--sapFontFamily)', fontSize: '0.65rem',
+          color, textAlign: 'center', fontWeight: 600,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%',
         }}>
-          {s.name}
+          {s.system_type}
         </span>
-        {s.system_type && (
-          <span style={{
-            fontFamily: 'var(--sapFontFamily)', fontSize: '0.65rem',
-            color, textAlign: 'center', fontWeight: 600,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%',
-          }}>
-            {s.system_type}
-          </span>
-        )}
-        {infraLine && (
-          <span style={{
-            fontFamily: 'var(--sapFontFamily)', fontSize: '0.6rem',
-            color: 'var(--sapContent_LabelColor)', textAlign: 'center',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%',
-          }}>
-            {infraLine}
-          </span>
-        )}
-      </div>
-    </>
+      )}
+      {infraLine && (
+        <span style={{
+          fontFamily: 'var(--sapFontFamily)', fontSize: '0.6rem',
+          color: 'var(--sapContent_LabelColor)', textAlign: 'center',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%',
+        }}>
+          {infraLine}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -179,7 +213,6 @@ export default function DiagramCanvas({ systems, interfaces, config, selectedIfa
     setEdges(e)
   }, [systems, interfaces, config])
 
-  // Re-highlight edges on selection change without resetting node positions
   useEffect(() => {
     setEdges(prev => prev.map(e => {
       const highlighted = (e.data?.key as string) === clickedKey
@@ -203,21 +236,14 @@ export default function DiagramCanvas({ systems, interfaces, config, selectedIfa
     const ifaceIds = (edge.data?.ifaceIds as string[]) ?? []
     const rect     = (evt.currentTarget as HTMLElement).closest('.react-flow')?.getBoundingClientRect()
 
-    // Toggle off if clicking the same edge twice
-    if (clickedKey === key) {
-      setClickedKey(null); setPopup(null); return
-    }
+    if (clickedKey === key) { setClickedKey(null); setPopup(null); return }
 
     setClickedKey(key)
     setPopup({ x: evt.clientX - (rect?.left ?? 0), y: evt.clientY - (rect?.top ?? 0), ifaceIds })
-
-    // Auto-open detail if only one interface on this connection
     if (ifaceIds.length === 1) onSelectIface(ifaceIds[0])
   }, [clickedKey, onSelectIface])
 
-  const onPaneClick = useCallback(() => {
-    setClickedKey(null); setPopup(null)
-  }, [])
+  const onPaneClick = useCallback(() => { setClickedKey(null); setPopup(null) }, [])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -225,6 +251,7 @@ export default function DiagramCanvas({ systems, interfaces, config, selectedIfa
         nodes={nodes}
         edges={edges}
         nodeTypes={NODE_TYPES}
+        edgeTypes={EDGE_TYPES}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeDragStop={onNodeDragStop}
@@ -245,23 +272,15 @@ export default function DiagramCanvas({ systems, interfaces, config, selectedIfa
         />
       </ReactFlow>
 
-      {/* Click popup listing interfaces on this connection */}
       {popup && popup.ifaceIds.length > 0 && (
         <div style={{
-          position: 'absolute',
-          left: popup.x + 12,
-          top: popup.y - 8,
-          background: 'var(--sapTile_Background)',
-          border: '1px solid var(--sapList_BorderColor)',
-          borderRadius: '6px',
-          zIndex: 100,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
-          minWidth: '200px',
-          overflow: 'hidden',
+          position: 'absolute', left: popup.x + 12, top: popup.y - 8,
+          background: 'var(--sapTile_Background)', border: '1px solid var(--sapList_BorderColor)',
+          borderRadius: '6px', zIndex: 100, boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+          minWidth: '200px', overflow: 'hidden',
         }}>
           <div style={{
-            padding: '6px 12px',
-            background: 'var(--sapGroup_TitleBackground)',
+            padding: '6px 12px', background: 'var(--sapGroup_TitleBackground)',
             borderBottom: '1px solid var(--sapList_BorderColor)',
             fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem',
             color: 'var(--sapContent_LabelColor)', fontWeight: 600,
