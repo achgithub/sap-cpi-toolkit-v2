@@ -229,22 +229,26 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
   useEffect(() => {
     function onMove(e: MouseEvent) {
       if (drag.current) {
-        const dx = (e.clientX - drag.current.mx) / scale
-        const dy = (e.clientY - drag.current.my) / scale
-        setPos(prev => ({ ...prev, [drag.current!.id]: { x: drag.current!.ox + dx, y: drag.current!.oy + dy } }))
+        // Destructure before setPos — the ref may be null by the time
+        // the async updater function runs (stale ref crash).
+        const { id, ox, oy, mx, my } = drag.current
+        const dx = (e.clientX - mx) / scale
+        const dy = (e.clientY - my) / scale
+        setPos(prev => ({ ...prev, [id]: { x: ox + dx, y: oy + dy } }))
       }
       if (panRef.current) {
-        setPan({ x: panRef.current.px + e.clientX - panRef.current.mx, y: panRef.current.py + e.clientY - panRef.current.my })
+        const { px, py, mx, my } = panRef.current
+        setPan({ x: px + e.clientX - mx, y: py + e.clientY - my })
       }
     }
     function onUp(e: MouseEvent) {
       if (drag.current) {
-        const id = drag.current.id
-        const nx = snap((drag.current.ox + (e.clientX - drag.current.mx) / scale))
-        const ny = snap((drag.current.oy + (e.clientY - drag.current.my) / scale))
+        const { id, ox, oy, mx, my } = drag.current
+        drag.current = null  // clear before setPos to avoid any re-entrant access
+        const nx = snap(ox + (e.clientX - mx) / scale)
+        const ny = snap(oy + (e.clientY - my) / scale)
         setPos(prev => ({ ...prev, [id]: { x: nx, y: ny } }))
         onNodeMoved(id, nx, ny)
-        drag.current = null
       }
       panRef.current = null
     }
