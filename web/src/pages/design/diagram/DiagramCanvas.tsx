@@ -60,30 +60,45 @@ function dagreLayout(systems: IFSystem[], pairs: [string, string][]) {
 }
 
 // ── Label builder ─────────────────────────────────────────────────────────────
-// Returns the array of strings to render along a line.
-// count mode: always one label = the count ("1", "3", etc.)
-// ref mode: interface_ref values, truncated to what fits on the line then "…"
+
+type LabelItem =
+  | { kind: 'count'; text: string; ifaceIds: string[] }
+  | { kind: 'ref';   text: string; ifaceId: string }
+  | { kind: 'more';  text: string; hiddenIds: string[] }
 
 function buildLabels(
   ifaceIds: string[],
   ifaceIndex: Map<string, IFInterface>,
   mode: 'count' | 'ref',
   lineLen: number,
-): string[] {
-  if (mode === 'count') return [String(ifaceIds.length)]
+): LabelItem[] {
+  if (mode === 'count') {
+    return [{ kind: 'count', text: String(ifaceIds.length), ifaceIds }]
+  }
 
-  const refs = ifaceIds
-    .map(id => ifaceIndex.get(id)?.interface_ref ?? '')
-    .filter(r => r.length > 0)
+  // Collect ids+refs for interfaces that have a ref set
+  const items = ifaceIds
+    .map(id => ({ id, ref: ifaceIndex.get(id)?.interface_ref ?? '' }))
+    .filter(x => x.ref.length > 0)
 
-  if (refs.length === 0) return [String(ifaceIds.length)] // fallback to count
+  // Fallback to count if no refs set yet
+  if (items.length === 0) {
+    return [{ kind: 'count', text: String(ifaceIds.length), ifaceIds }]
+  }
 
   const maxFit = Math.max(1, Math.floor(lineLen / (LABEL_W + 12)))
 
-  if (refs.length <= maxFit) return refs
+  if (items.length <= maxFit) {
+    return items.map(x => ({ kind: 'ref' as const, text: x.ref, ifaceId: x.id }))
+  }
 
-  // Show as many as fit, replace last slot with "…"
-  return [...refs.slice(0, maxFit - 1), '…']
+  // Show as many as fit; last slot becomes an overflow "…" label
+  const shown  = items.slice(0, maxFit - 1)
+  const hidden = items.slice(maxFit - 1)
+  return [
+    ...shown.map(x => ({ kind: 'ref' as const, text: x.ref, ifaceId: x.id })),
+    { kind: 'more' as const, text: `+${hidden.length}`, hiddenIds: hidden.map(x => x.id) },
+  ]
 }
 
 // ── Edge colour persistence (localStorage, per project) ───────────────────────
@@ -242,6 +257,15 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
     panRef.current = { mx: e.clientX, my: e.clientY, px: pan.x, py: pan.y }
   }, [pan])
 
+  // Convert a canvas-space point to screen coords for popup positioning
+  const canvasToScreen = useCallback((cx: number, cy: number) => {
+    const rect = containerRef.current?.getBoundingClientRect()
+    return {
+      sx: cx * scale + pan.x + (rect?.left ?? 0),
+      sy: cy * scale + pan.y + (rect?.top  ?? 0),
+    }
+  }, [scale, pan])
+
   const onLineClick = useCallback((e: React.MouseEvent, key: string, ifaceIds: string[]) => {
     e.stopPropagation()
     if (clickedKey === key) { setClickedKey(null); setPopup(null); return }
@@ -249,6 +273,19 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
     setPopup({ sx: e.clientX, sy: e.clientY, ifaceIds, key })
     if (ifaceIds.length === 1) onSelectIface(ifaceIds[0])
   }, [clickedKey, onSelectIface])
+
+  const onRefClick = useCallback((e: React.MouseEvent, ifaceId: string) => {
+    e.stopPropagation()
+    setPopup(null); setClickedKey(null)
+    onSelectIface(ifaceId)
+  }, [onSelectIface])
+
+  const onMoreClick = useCallback((e: React.MouseEvent, key: string, hiddenIds: string[], cx: number, cy: number) => {
+    e.stopPropagation()
+    const { sx, sy } = canvasToScreen(cx, cy)
+    setClickedKey(key)
+    setPopup({ sx, sy, ifaceIds: hiddenIds, key })
+  }, [canvasToScreen])
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -305,16 +342,28 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
                   const t  = (li + 1) / (labels.length + 1)
                   const lx = src.x + t * (tgt.x - src.x)
                   const ly = src.y + t * (tgt.y - src.y)
-                  const tw = label.length * 5.5 + 10
+                  const tw = label.text.length * 5.5 + 12
+
+                  const isClickable = label.kind === 'ref' || label.kind === 'more'
+                  const fill = label.kind === 'more' ? 'var(--sapContent_LabelColor)' : stroke
+
+                  function handleLabelClick(e: React.MouseEvent) {
+                    e.stopPropagation()
+                    if (label.kind === 'ref')  onRefClick(e, label.ifaceId)
+                    if (label.kind === 'more') onMoreClick(e, key, label.hiddenIds, lx, ly)
+                  }
+
                   return (
-                    <g key={li} style={{ pointerEvents: 'none' }}>
+                    <g key={li}
+                      style={{ cursor: isClickable ? 'pointer' : 'default', pointerEvents: isClickable ? 'auto' : 'none' }}
+                      onClick={isClickable ? handleLabelClick : undefined}
+                    >
                       <rect x={lx - tw / 2} y={ly - 9} width={tw} height={18} rx={4}
                         fill="var(--sapTile_Background)" stroke={stroke} strokeWidth={1} />
                       <text x={lx} y={ly + 5} textAnchor="middle"
                         fontSize={11} fontFamily="var(--sapFontFamily)"
-                        fill={label === '…' ? 'var(--sapContent_LabelColor)' : stroke}
-                        fontWeight={600}>
-                        {label}
+                        fill={fill} fontWeight={600}>
+                        {label.text}
                       </text>
                     </g>
                   )
@@ -375,7 +424,7 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
         >
           {/* Interface list */}
           <div style={{ padding: '6px 12px', background: 'var(--sapGroup_TitleBackground)', borderBottom: '1px solid var(--sapList_BorderColor)', fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)', fontWeight: 600 }}>
-            {popup.ifaceIds.length === 1 ? 'Interface' : `${popup.ifaceIds.length} Interfaces`}
+            {popup.ifaceIds.length === 1 ? 'Interface' : `${popup.ifaceIds.length} more`}
           </div>
           {popup.ifaceIds.map(id => {
             const iface  = ifaceIndex.get(id)
