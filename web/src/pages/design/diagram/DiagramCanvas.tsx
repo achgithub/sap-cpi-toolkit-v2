@@ -170,23 +170,38 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
 
   // ── Fit to view ─────────────────────────────────────────────────────────────
 
-  function fitView() {
+  const fitView = useCallback(() => {
     const el = containerRef.current
-    if (!el || Object.keys(pos).length === 0) return
+    if (!el || systems.length === 0) return
     const rect = el.getBoundingClientRect()
-    const xs   = Object.values(pos).map(p => p.x)
-    const ys   = Object.values(pos).map(p => p.y)
+    // Only consider positions of currently-visible systems
+    const visiblePos = systems.map(s => pos[s.id]).filter(Boolean)
+    if (visiblePos.length === 0) return
+    const xs   = visiblePos.map(p => p.x)
+    const ys   = visiblePos.map(p => p.y)
     const minX = Math.min(...xs), minY = Math.min(...ys)
     const maxX = Math.max(...xs) + NODE_W, maxY = Math.max(...ys) + NODE_H
     const pad  = 60
     const ns   = Math.min(
-      (rect.width  - pad * 2) / (maxX - minX),
-      (rect.height - pad * 2) / (maxY - minY),
+      (rect.width  - pad * 2) / Math.max(maxX - minX, 1),
+      (rect.height - pad * 2) / Math.max(maxY - minY, 1),
       1.5,
     )
     setScale(ns)
     setPan({ x: (rect.width - (maxX - minX) * ns) / 2 - minX * ns, y: (rect.height - (maxY - minY) * ns) / 2 - minY * ns })
-  }
+  }, [systems, pos])
+
+  // Keep a stable ref so the auto-fit effect always calls the latest version
+  const fitViewRef = useRef(fitView)
+  useEffect(() => { fitViewRef.current = fitView })
+
+  // Auto-fit whenever the visible system set changes (filter applied / cleared)
+  const sysKey = systems.map(s => s.id).sort().join(',')
+  useEffect(() => {
+    if (!sysKey) return
+    const t = setTimeout(() => fitViewRef.current(), 80)
+    return () => clearTimeout(t)
+  }, [sysKey])
 
   // ── Edge colour ──────────────────────────────────────────────────────────────
 
