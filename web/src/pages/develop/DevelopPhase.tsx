@@ -3,15 +3,12 @@ import GroovyIDE from '../../tools/GroovyIDE'
 import IFlowScaffold from './IFlowScaffold'
 import XSDGenerator from '../../tools/XSDGenerator'
 import XSLTMapEditor from '../../tools/XSLTMapEditor'
-import AdapterTemplates from '../../tools/AdapterTemplates'
-
 const DEVELOP_NAV = [
-  { id: 'map-editor',         label: 'XSLT Map Editor',    icon: 'map-2'               },
-  { id: 'xsd-generator',      label: 'XSD Generator',      icon: 'document-text'       },
-  { id: 'groovy',             label: 'Groovy IDE',          icon: 'source-code'         },
-  { id: 'iflow-scaffold',     label: 'iFlow Scaffold',      icon: 'puzzle'              },
-  { id: 'adapter-templates',  label: 'Adapter Templates',   icon: 'wrench'              },
-  { id: 'tech-spec',          label: 'Tech Spec',           icon: 'bbyd-active-tasks'   },
+  { id: 'map-editor',     label: 'XSLT Map Editor',  icon: 'map-2'               },
+  { id: 'xsd-generator',  label: 'XSD Generator',    icon: 'document-text'       },
+  { id: 'groovy',         label: 'Groovy IDE',        icon: 'source-code'         },
+  { id: 'iflow-scaffold', label: 'iFlow Scaffold',    icon: 'puzzle'              },
+  { id: 'tech-spec',      label: 'Tech Spec',         icon: 'bbyd-active-tasks'   },
 ]
 
 function Placeholder({ title, description }: { title: string; description: string }) {
@@ -31,9 +28,8 @@ export default function DevelopPhase() {
           {id === 'map-editor'     && <XSLTMapEditor />}
           {id === 'xsd-generator'  && <XSDGenerator />}
           {id === 'groovy'         && <GroovyIDE />}
-          {id === 'iflow-scaffold'    && <IFlowScaffold />}
-          {id === 'adapter-templates' && <AdapterTemplates />}
-          {id === 'tech-spec'         && <Placeholder title="Tech Spec Generation" description="Export interface diagram + metadata to a structured Word/PDF template. POC pending." />}
+          {id === 'iflow-scaffold' && <IFlowScaffold />}
+          {id === 'tech-spec'      && <Placeholder title="Tech Spec Generation" description="Export interface diagram + metadata to a structured Word/PDF template. POC pending." />}
         </>
       )}
     </PhaseLayout>

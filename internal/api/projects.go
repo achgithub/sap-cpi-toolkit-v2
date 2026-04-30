@@ -60,6 +60,9 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 500, "internal error")
 		return
 	}
+	if err := CopyGlobalTemplatesToProject(r.Context(), h.pool, p.ID); err != nil {
+		h.log.Error("copy templates to new project", "project", p.ID, "error", err)
+	}
 	h.log.Info("project created", "id", p.ID, "name", p.Name, "user", userID(r))
 	jsonResp(w, 201, p)
 }

@@ -104,11 +104,23 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /scaffold/preflight", h.scaffoldPreflight)
 	mux.HandleFunc("POST /scaffold/upload",    h.scaffoldUpload)
 
-	// Scaffold Templates (adapter BPMN snippets)
-	mux.HandleFunc("GET /scaffold/templates",             h.listScaffoldTemplates)
-	mux.HandleFunc("GET /scaffold/templates/{key}",       h.getScaffoldTemplate)
-	mux.HandleFunc("PUT /scaffold/templates/{key}",       h.updateScaffoldTemplate)
-	mux.HandleFunc("POST /scaffold/templates/{key}/reset", h.resetScaffoldTemplate)
+	// Scaffold Templates — global
+	mux.HandleFunc("GET /scaffold/templates",                              h.listGlobalFragments)
+	mux.HandleFunc("POST /scaffold/templates/{key}/variants",              h.createGlobalVariant)
+	mux.HandleFunc("GET /scaffold/templates/variants/{id}",                h.getVariant)
+	mux.HandleFunc("PUT /scaffold/templates/variants/{id}",                h.updateVariant)
+	mux.HandleFunc("DELETE /scaffold/templates/variants/{id}",             h.deleteVariant)
+	mux.HandleFunc("POST /scaffold/templates/variants/{id}/default",       h.setDefaultVariant)
+	mux.HandleFunc("POST /scaffold/templates/variants/{id}/reset",         h.resetVariant)
+
+	// Scaffold Templates — project-scoped
+	mux.HandleFunc("GET /projects/{pid}/scaffold/templates",                          h.listProjectFragments)
+	mux.HandleFunc("POST /projects/{pid}/scaffold/templates",                         h.copyTemplatesToProject)
+	mux.HandleFunc("POST /projects/{pid}/scaffold/templates/{key}/variants",          h.createProjectVariant)
+	mux.HandleFunc("PUT /projects/{pid}/scaffold/templates/variants/{id}",            h.updateVariant)
+	mux.HandleFunc("DELETE /projects/{pid}/scaffold/templates/variants/{id}",         h.deleteVariant)
+	mux.HandleFunc("POST /projects/{pid}/scaffold/templates/variants/{id}/default",   h.setDefaultVariant)
+	mux.HandleFunc("POST /projects/{pid}/scaffold/templates/variants/{id}/reset",     h.resetVariant)
 
 	// SFTP Server — config
 	mux.HandleFunc("GET /sftp-server",            h.getSFTPServer)

@@ -47,6 +47,9 @@ type ScaffoldRequest struct {
 	SFTPReceiverPrivateKey    string `json:"sftp_receiver_private_key"`
 	SFTPReceiverUsername      string `json:"sftp_receiver_username"`
 	SFTPReceiverDirectory     string `json:"sftp_receiver_directory"`
+	// Template selection
+	ProjectID  string            `json:"project_id,omitempty"`
+	VariantIDs map[string]string `json:"variant_ids,omitempty"` // fragment_key → variant UUID
 }
 
 var scaffoldAllowedTypes = map[string]bool{"TRL": true, "SBX": true, "DEV": true}
@@ -396,7 +399,12 @@ func scaffoldUpsertArtifact(ctx context.Context, client *http.Client, apiBase, t
 // ── ZIP builder ────────────────────────────────────────────────────────────────
 
 func (h *Handler) generateScaffoldZIP(ctx context.Context, req ScaffoldRequest) ([]byte, error) {
-	templates := LoadScaffoldTemplates(ctx, h.pool)
+	var templates map[string]string
+	if req.ProjectID != "" {
+		templates = LoadScaffoldTemplatesForProject(ctx, h.pool, req.ProjectID, req.VariantIDs)
+	} else {
+		templates = LoadScaffoldTemplates(ctx, h.pool)
+	}
 	groovyName := req.GroovyName
 	if groovyName == "" {
 		groovyName = "script"

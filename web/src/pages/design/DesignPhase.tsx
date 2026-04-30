@@ -6,6 +6,7 @@ import {
 import PhaseLayout from '../../components/PhaseLayout'
 import { useWorkspace, type Project } from '../../context/WorkspaceContext'
 import ProjectSetup from './ProjectSetup'
+import AdapterTemplates from '../../tools/AdapterTemplates'
 
 interface ProjectForm { name: string; description: string }
 const emptyForm = (): ProjectForm => ({ name: '', description: '' })
@@ -162,8 +163,9 @@ function ProjectsSection() {
 // ── Design phase shell with sub-nav ──────────────────────────────────────────
 
 const DESIGN_NAV = [
-  { id: 'projects', label: 'Projects',          icon: 'business-objects-experience' },
-  { id: 'diagram',  label: 'Interface Diagram', icon: 'org-chart'                   },
+  { id: 'projects',           label: 'Projects',           icon: 'business-objects-experience' },
+  { id: 'adapter-templates',  label: 'Adapter Templates',  icon: 'wrench'                      },
+  { id: 'diagram',            label: 'Interface Diagram',  icon: 'org-chart'                   },
 ]
 
 function PhasePlaceholder({ title, description }: { title: string; description: string }) {
@@ -180,8 +182,9 @@ export default function DesignPhase() {
     <PhaseLayout storageKey="v2-design" items={DESIGN_NAV}>
       {(id) => (
         <>
-          {id === 'projects' && <ProjectsSection />}
-          {id === 'diagram'  && <PhasePlaceholder title="Interface Diagram" description="Freeform block diagram builder. POC complete in V1 — full project-linked build coming in Step 7." />}
+          {id === 'projects'          && <ProjectsSection />}
+          {id === 'adapter-templates' && <AdapterTemplates />}
+          {id === 'diagram'           && <PhasePlaceholder title="Interface Diagram" description="Freeform block diagram builder. POC complete in V1 — full project-linked build coming in Step 7." />}
         </>
       )}
     </PhaseLayout>
