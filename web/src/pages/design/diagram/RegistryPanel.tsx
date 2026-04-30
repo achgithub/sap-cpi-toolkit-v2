@@ -10,6 +10,7 @@ interface Props {
   selectedId: string | null
   onSelect: (id: string) => void
   onCreateSystem: (body: Partial<IFSystem>) => Promise<void>
+  onUpdateSystem: (id: string, body: Partial<IFSystem>) => Promise<void>
   onCreateInterface: (body: Partial<IFInterface>) => Promise<void>
   onDeleteSystem: (id: string) => Promise<void>
 }
@@ -27,9 +28,10 @@ const emptyIface  = (): IfaceForm  => ({
   sender_system_id: null, integration_platform: '',
 })
 
-export default function RegistryPanel({ systems, interfaces, config, selectedId, onSelect, onCreateSystem, onCreateInterface, onDeleteSystem }: Props) {
+export default function RegistryPanel({ systems, interfaces, config, selectedId, onSelect, onCreateSystem, onUpdateSystem, onCreateInterface, onDeleteSystem }: Props) {
   const [tab,        setTab]        = useState<'interfaces' | 'systems'>('interfaces')
   const [systemDlg,  setSystemDlg]  = useState(false)
+  const [editSystem, setEditSystem] = useState<IFSystem | null>(null)
   const [ifaceDlg,   setIfaceDlg]   = useState(false)
   const [systemForm, setSystemForm] = useState(emptySystem())
   const [ifaceForm,  setIfaceForm]  = useState(emptyIface())
@@ -41,9 +43,24 @@ export default function RegistryPanel({ systems, interfaces, config, selectedId,
   async function saveSystem() {
     if (!systemForm.name.trim()) { setError('Name is required'); return }
     setSaving(true); setError('')
-    try { await onCreateSystem(systemForm); setSystemDlg(false); setSystemForm(emptySystem()) }
+    try {
+      if (editSystem) {
+        await onUpdateSystem(editSystem.id, systemForm)
+        setEditSystem(null)
+      } else {
+        await onCreateSystem(systemForm)
+        setSystemDlg(false)
+      }
+      setSystemForm(emptySystem())
+    }
     catch (e) { setError(e instanceof Error ? e.message : String(e)) }
     finally { setSaving(false) }
+  }
+
+  function openEditSystem(s: IFSystem) {
+    setEditSystem(s)
+    setSystemForm({ name: s.name, description: s.description, system_type: s.system_type, infra_type: s.infra_type, infra_region: s.infra_region })
+    setError('')
   }
 
   async function saveIface() {
@@ -134,6 +151,7 @@ export default function RegistryPanel({ systems, interfaces, config, selectedId,
                         </div>
                       )}
                     </div>
+                    <Button design="Transparent" icon="edit" onClick={() => openEditSystem(s)} />
                     <Button design="Transparent" icon="delete" onClick={() => setDeleteId(s.id)} />
                   </div>
                 )
@@ -142,6 +160,38 @@ export default function RegistryPanel({ systems, interfaces, config, selectedId,
           </div>
         </>
       )}
+
+      {/* Edit System dialog */}
+      <Dialog open={!!editSystem} headerText="Edit System" onClose={() => setEditSystem(null)} style={{ width: '440px', maxWidth: '95vw' }}>
+        <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {error && <MessageStrip design="Negative" hideCloseButton>{error}</MessageStrip>}
+          <F label="Name"><Input value={systemForm.name} onInput={e => setSystemForm(f => ({ ...f, name: (e.target as unknown as HTMLInputElement).value }))} style={{ width: '100%' }} /></F>
+          <F label="Description"><Input value={systemForm.description} onInput={e => setSystemForm(f => ({ ...f, description: (e.target as unknown as HTMLInputElement).value }))} style={{ width: '100%' }} /></F>
+          <F label="System Type">
+            <Select value={systemForm.system_type} onChange={e => setSystemForm(f => ({ ...f, system_type: (e.target as unknown as HTMLSelectElement).value }))}>
+              <Option value="">— select type —</Option>
+              {config.systemTypes.map(t => <Option key={t.name} value={t.name}>{t.name}</Option>)}
+            </Select>
+          </F>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <F label="Infrastructure">
+              <Select value={systemForm.infra_type} onChange={e => setSystemForm(f => ({ ...f, infra_type: (e.target as unknown as HTMLSelectElement).value }))}>
+                <Option value="">— unknown —</Option>
+                {config.infraTypes.map(t => <Option key={t.name} value={t.name}>{t.name}</Option>)}
+              </Select>
+            </F>
+            <F label="Region / Location">
+              <Input value={systemForm.infra_region} placeholder="e.g. eu-west-1, London" onInput={e => setSystemForm(f => ({ ...f, infra_region: (e.target as unknown as HTMLInputElement).value }))} />
+            </F>
+          </div>
+        </div>
+        <Bar slot="footer">
+          <FlexBox justifyContent={FlexBoxJustifyContent.SpaceBetween} style={{ width: '100%', padding: '0 0.5rem' }}>
+            <Button onClick={() => setEditSystem(null)}>Cancel</Button>
+            <Button design="Emphasized" onClick={saveSystem} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+          </FlexBox>
+        </Bar>
+      </Dialog>
 
       {/* New System dialog */}
       <Dialog open={systemDlg} headerText="New System" onClose={() => setSystemDlg(false)} style={{ width: '440px', maxWidth: '95vw' }}>

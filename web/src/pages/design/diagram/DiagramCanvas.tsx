@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ReactFlow, Background, Controls, MiniMap,
-  useNodesState, useEdgesState,
+  useNodesState, useEdgesState, Handle, Position,
   type Node, type Edge, type NodeMouseHandler,
 } from '@xyflow/react'
 import dagre from '@dagrejs/dagre'
@@ -120,44 +120,48 @@ function buildGraph(
 function SystemNode({ data }: { data: { system: IFSystem; color: string } }) {
   const { system: s, color } = data
   const infraLine = [s.infra_type, s.infra_region].filter(Boolean).join(' · ')
+  const handleStyle = { background: color, border: 'none', width: '8px', height: '8px' }
   return (
-    <div style={{
-      width: '100%', height: '100%', boxSizing: 'border-box',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      background: 'var(--sapTile_Background)',
-      border: `2px solid ${color}`,
-      borderRadius: '8px',
-      padding: '8px',
-      gap: '4px',
-    }}>
-      {/* Color accent bar */}
-      <div style={{ width: '100%', height: '4px', borderRadius: '2px', background: color, flexShrink: 0 }} />
-      <span style={{
-        fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', fontWeight: 'bold',
-        color: 'var(--sapTextColor)', textAlign: 'center', lineHeight: 1.2,
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%',
+    <>
+      <Handle type="target" position={Position.Left}  style={handleStyle} />
+      <Handle type="source" position={Position.Right} style={handleStyle} />
+      <div style={{
+        width: '100%', height: '100%', boxSizing: 'border-box',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        background: 'var(--sapTile_Background)',
+        border: `1px solid var(--sapList_BorderColor)`,
+        borderTop: `4px solid ${color}`,
+        borderRadius: '6px',
+        padding: '8px 10px',
+        gap: '3px',
       }}>
-        {s.name}
-      </span>
-      {s.system_type && (
         <span style={{
-          fontFamily: 'var(--sapFontFamily)', fontSize: '0.65rem',
-          color, textAlign: 'center', fontWeight: 600,
+          fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', fontWeight: 'bold',
+          color: 'var(--sapTextColor)', textAlign: 'center', lineHeight: 1.25,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%',
         }}>
-          {s.system_type}
+          {s.name}
         </span>
-      )}
-      {infraLine && (
-        <span style={{
-          fontFamily: 'var(--sapFontFamily)', fontSize: '0.6rem',
-          color: 'var(--sapContent_LabelColor)', textAlign: 'center',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%',
-        }}>
-          {infraLine}
-        </span>
-      )}
-    </div>
+        {s.system_type && (
+          <span style={{
+            fontFamily: 'var(--sapFontFamily)', fontSize: '0.65rem',
+            color, textAlign: 'center', fontWeight: 600,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%',
+          }}>
+            {s.system_type}
+          </span>
+        )}
+        {infraLine && (
+          <span style={{
+            fontFamily: 'var(--sapFontFamily)', fontSize: '0.6rem',
+            color: 'var(--sapContent_LabelColor)', textAlign: 'center',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%',
+          }}>
+            {infraLine}
+          </span>
+        )}
+      </div>
+    </>
   )
 }
 

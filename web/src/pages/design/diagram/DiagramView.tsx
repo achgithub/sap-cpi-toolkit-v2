@@ -83,6 +83,7 @@ function DiagramInner({ projectId }: { projectId: string }) {
           selectedId={selectedId}
           onSelect={id => setSelectedId(prev => prev === id ? null : id)}
           onCreateSystem={data.createSystem}
+          onUpdateSystem={data.updateSystem}
           onCreateInterface={data.createInterface}
           onDeleteSystem={data.deleteSystem}
         />
