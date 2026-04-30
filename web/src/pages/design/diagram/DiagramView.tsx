@@ -42,17 +42,26 @@ function DiagramInner({ projectId }: { projectId: string }) {
   const { filteredSystems, filteredInterfaces } = useMemo(() => {
     let ifaces = data.interfaces
 
-    // Non-system filters apply to all interfaces regardless
+    // Status filter applies to interfaces directly
     if (filter.statuses.length)
       ifaces = ifaces.filter(i => filter.statuses.includes(i.status))
-    if (filter.ifaceTypes.length)
-      ifaces = ifaces.filter(i => filter.ifaceTypes.includes(i.interface_type))
-    if (filter.platforms.length)
-      ifaces = ifaces.filter(i => filter.platforms.includes(i.integration_platform))
 
-    // System filter: only show interfaces where BOTH the sender AND at least
-    // one receiver are within the selected set. Selecting one system = just
-    // that box (no connections unless another selected system is on the other end).
+    // Infra filter: find systems with matching infra_type, then keep interfaces
+    // where any connected system (sender or receiver) has that infra type.
+    // Shows what connects TO/FROM those infra environments.
+    if (filter.infraTypes.length) {
+      const infraSystemIds = new Set(
+        data.systems.filter(s => filter.infraTypes.includes(s.infra_type)).map(s => s.id)
+      )
+      ifaces = ifaces.filter(iface => {
+        const senderMatch   = !!iface.sender_system_id && infraSystemIds.has(iface.sender_system_id)
+        const receiverMatch = iface.receivers.some(r => !!r.system_id && infraSystemIds.has(r.system_id))
+        return senderMatch || receiverMatch
+      })
+    }
+
+    // System filter: strict — only interfaces where BOTH sender AND at least one
+    // receiver are within the selected set.
     if (filter.systems.length) {
       ifaces = ifaces.filter(iface => {
         const senderIn   = !!iface.sender_system_id && filter.systems.includes(iface.sender_system_id)
@@ -61,14 +70,13 @@ function DiagramInner({ projectId }: { projectId: string }) {
       })
     }
 
-    // Visible systems:
-    // - System filter active → show exactly the selected systems (even if no connections)
-    // - Other filters only → hide systems with no remaining interfaces
-    // - No filter → show all
+    // Visible systems
     let systems = data.systems
     if (filter.systems.length) {
+      // System filter active: show exactly the selected systems
       systems = data.systems.filter(s => filter.systems.includes(s.id))
-    } else if (filter.statuses.length || filter.ifaceTypes.length || filter.platforms.length) {
+    } else if (filter.statuses.length || filter.infraTypes.length) {
+      // Other filters: hide systems not involved in any remaining interface
       const usedIds = new Set<string>()
       ifaces.forEach(iface => {
         if (iface.sender_system_id) usedIds.add(iface.sender_system_id)

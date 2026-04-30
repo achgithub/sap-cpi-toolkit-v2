@@ -1,24 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import type { IFSystem, RegistryConfig } from './types'
-import { STATUSES, TYPE_LABELS, STATUS_COLORS } from './types'
+import { STATUSES, STATUS_COLORS } from './types'
 
 export interface DiagramFilter {
-  systems:    string[]
-  statuses:   string[]
-  ifaceTypes: string[]
-  platforms:  string[]
+  systems:    string[]   // specific system IDs (strict: only between selected)
+  statuses:   string[]   // interface status
+  infraTypes: string[]   // system.infra_type values (e.g. On-Prem, AWS)
 }
 
 export const emptyFilter = (): DiagramFilter =>
-  ({ systems: [], statuses: [], ifaceTypes: [], platforms: [] })
-
-export function isFilterEmpty(f: DiagramFilter) {
-  return !f.systems.length && !f.statuses.length && !f.ifaceTypes.length && !f.platforms.length
-}
+  ({ systems: [], statuses: [], infraTypes: [] })
 
 export function activeFilterCount(f: DiagramFilter) {
   return (f.systems.length ? 1 : 0) + (f.statuses.length ? 1 : 0) +
-         (f.ifaceTypes.length ? 1 : 0) + (f.platforms.length ? 1 : 0)
+         (f.infraTypes.length ? 1 : 0)
 }
 
 interface Props {
@@ -168,11 +163,8 @@ export default function DiagramFilters({ systems, config, filter, onChange }: Pr
     color: STATUS_COLORS[s],
   }))
 
-  const typeOptions = (Object.entries(TYPE_LABELS) as [string, string][]).map(([v, l]) => ({
-    value: v, label: l,
-  }))
-
-  const platformOptions = config.platforms.map(p => ({ value: p.name, label: p.name }))
+  // Infra type options — deduplicated from the config list
+  const infraOptions = config.infraTypes.map(t => ({ value: t.name, label: t.name }))
 
   return (
     <div style={{
@@ -203,16 +195,10 @@ export default function DiagramFilters({ systems, config, filter, onChange }: Pr
         onChange={v => onChange({ ...filter, statuses: v })}
       />
       <MultiDropdown
-        label="Type"
-        options={typeOptions}
-        selected={filter.ifaceTypes}
-        onChange={v => onChange({ ...filter, ifaceTypes: v })}
-      />
-      <MultiDropdown
-        label="Platform"
-        options={platformOptions}
-        selected={filter.platforms}
-        onChange={v => onChange({ ...filter, platforms: v })}
+        label="Infra"
+        options={infraOptions}
+        selected={filter.infraTypes}
+        onChange={v => onChange({ ...filter, infraTypes: v })}
       />
 
       {count > 0 && (
