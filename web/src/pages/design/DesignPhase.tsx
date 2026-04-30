@@ -7,6 +7,7 @@ import PhaseLayout from '../../components/PhaseLayout'
 import { useWorkspace, type Project } from '../../context/WorkspaceContext'
 import ProjectSetup from './ProjectSetup'
 import ProjectAdapterTemplates from '../../tools/ProjectAdapterTemplates'
+import DiagramView from './diagram/DiagramView'
 
 interface ProjectForm { name: string; description: string }
 const emptyForm = (): ProjectForm => ({ name: '', description: '' })
@@ -211,7 +212,7 @@ export default function DesignPhase() {
         <>
           {id === 'projects'  && <ProjectsSection />}
           {id === 'templates' && <TemplatesSection />}
-          {id === 'diagram'   && <PhasePlaceholder title="Interface Diagram" description="Freeform block diagram builder. POC complete in V1 — full project-linked build coming in Step 7." />}
+          {id === 'diagram'   && <DiagramView />}
         </>
       )}
     </PhaseLayout>

@@ -32,10 +32,12 @@ func main() {
 		TenantURL:     os.Getenv("IAS_TENANT_URL"),
 	})
 
-	groovyURL := envOr("GROOVY_INTERNAL_URL", "http://groovy-runner:8082")
+	groovyURL     := envOr("GROOVY_INTERNAL_URL",    "http://groovy-runner:8082")
+	interfacesURL := envOr("INTERFACES_INTERNAL_URL", "http://interfaces:8083")
 
-	apiProxy    := mustProxy(apiURL,    "/api/v2")
-	groovyProxy := mustProxy(groovyURL, "/api/groovy")
+	apiProxy        := mustProxy(apiURL,        "/api/v2")
+	groovyProxy     := mustProxy(groovyURL,     "/api/groovy")
+	interfacesProxy := mustProxy(interfacesURL, "/api/interfaces")
 
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
@@ -52,8 +54,9 @@ func main() {
 	mux.HandleFunc("/auth/callback", authMiddleware.CallbackHandler)
 	mux.HandleFunc("/auth/logout", authMiddleware.LogoutHandler)
 
-	mux.Handle("/api/v2/",     authMiddleware.Handler(apiProxy))
-	mux.Handle("/api/groovy/", authMiddleware.Handler(groovyProxy))
+	mux.Handle("/api/v2/",         authMiddleware.Handler(apiProxy))
+	mux.Handle("/api/groovy/",     authMiddleware.Handler(groovyProxy))
+	mux.Handle("/api/interfaces/", authMiddleware.Handler(interfacesProxy))
 
 	mux.Handle("/", authMiddleware.Handler(spaHandler(http.FileServer(http.FS(staticFS)))))
 
