@@ -29,6 +29,7 @@ export interface IFInterface {
   interface_type: 'point_to_point' | 'broadcast' | 'shared_library' | 'utility'
   status: 'design' | 'dev' | 'test' | 'active' | 'deprecated'
   sender_system_id: string | null
+  interface_ref: string
   integration_platform: string
   cpi_package_id: string
   cpi_iflow_id: string

@@ -13,9 +13,18 @@ interface Props {
   onNodeMoved: (id: string, x: number, y: number) => void
 }
 
-const NODE_W = 160
-const NODE_H = 100
-const SNAP   = 20
+const NODE_W   = 160
+const NODE_H   = 100
+const SNAP     = 20
+const LABEL_W  = 72  // estimated canvas-unit width for a 10-char label at font-size 11
+
+// Shared toolbar button style
+const toolBtn: React.CSSProperties = {
+  padding: '4px 10px', border: '1px solid var(--sapList_BorderColor)',
+  borderRadius: '4px', background: 'var(--sapTile_Background)',
+  fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem',
+  color: 'var(--sapTextColor)', cursor: 'pointer',
+}
 
 // 8 colours for edge colouring
 const PALETTE = ['#0070F2', '#E53935', '#43A047', '#FB8C00', '#7B1FA2', '#00ACC1', '#F06292', '#795548']
@@ -50,6 +59,33 @@ function dagreLayout(systems: IFSystem[], pairs: [string, string][]) {
   return pos
 }
 
+// ── Label builder ─────────────────────────────────────────────────────────────
+// Returns the array of strings to render along a line.
+// count mode: always one label = the count ("1", "3", etc.)
+// ref mode: interface_ref values, truncated to what fits on the line then "…"
+
+function buildLabels(
+  ifaceIds: string[],
+  ifaceIndex: Map<string, IFInterface>,
+  mode: 'count' | 'ref',
+  lineLen: number,
+): string[] {
+  if (mode === 'count') return [String(ifaceIds.length)]
+
+  const refs = ifaceIds
+    .map(id => ifaceIndex.get(id)?.interface_ref ?? '')
+    .filter(r => r.length > 0)
+
+  if (refs.length === 0) return [String(ifaceIds.length)] // fallback to count
+
+  const maxFit = Math.max(1, Math.floor(lineLen / (LABEL_W + 12)))
+
+  if (refs.length <= maxFit) return refs
+
+  // Show as many as fit, replace last slot with "…"
+  return [...refs.slice(0, maxFit - 1), '…']
+}
+
 // ── Edge colour persistence (localStorage, per project) ───────────────────────
 
 function loadColors(projectId: string): Record<string, string> {
@@ -69,6 +105,7 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
   const [edgeColors, setEdgeColors] = useState<Record<string, string>>(() => loadColors(projectId))
   const [popup,      setPopup]      = useState<{ sx: number; sy: number; ifaceIds: string[]; key: string } | null>(null)
   const [clickedKey, setClickedKey] = useState<string | null>(null)
+  const [labelMode,  setLabelMode]  = useState<'count' | 'ref'>('count')
 
   const drag   = useRef<{ id: string; ox: number; oy: number; mx: number; my: number } | null>(null)
   const panRef = useRef<{ mx: number; my: number; px: number; py: number } | null>(null)
@@ -221,20 +258,17 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
       onMouseDown={onBgMouseDown}
       style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: 'var(--sapBackgroundColor)', cursor: 'grab' }}
     >
-      {/* Fit button */}
-      <button
-        onClick={fitView}
-        title="Fit all boxes into view"
-        style={{
-          position: 'absolute', top: 10, left: 10, zIndex: 10,
-          padding: '4px 10px', border: '1px solid var(--sapList_BorderColor)',
-          borderRadius: '4px', background: 'var(--sapTile_Background)',
-          fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem',
-          color: 'var(--sapTextColor)', cursor: 'pointer',
-        }}
-      >
-        ⤢ Fit
-      </button>
+      {/* Toolbar */}
+      <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 10, display: 'flex', gap: 6 }}>
+        <button onClick={fitView} title="Fit all boxes into view" style={toolBtn}>⤢ Fit</button>
+        <button
+          onClick={() => setLabelMode(m => m === 'count' ? 'ref' : 'count')}
+          title={labelMode === 'count' ? 'Switch to interface ref view' : 'Switch to count view'}
+          style={toolBtn}
+        >
+          {labelMode === 'count' ? '⊞ Refs' : '# Count'}
+        </button>
+      </div>
 
       {/* Transform wrapper */}
       <div style={{ position: 'absolute', inset: 0, transformOrigin: '0 0', transform: `translate(${pan.x}px,${pan.y}px) scale(${scale})` }}>
@@ -252,25 +286,39 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
             const color  = edgeColors[key] ?? '#555'
             const stroke = highlighted ? 'var(--sapHighlightColor)' : color
             const sw     = highlighted ? 2.5 : 2
-            const mx     = (src.x + tgt.x) / 2, my = (src.y + tgt.y) / 2
-            const count  = ifaceIds.length
+            const lineLen = Math.hypot(tgt.x - src.x, tgt.y - src.y)
+
+            // Build labels for this line
+            const labels = buildLabels(ifaceIds, ifaceIndex, labelMode, lineLen)
+
             return (
               <g key={key}>
+                {/* Wide transparent hit area */}
                 <line x1={src.x} y1={src.y} x2={tgt.x} y2={tgt.y}
                   stroke="transparent" strokeWidth={16} style={{ cursor: 'pointer' }}
                   onClick={e => onLineClick(e as unknown as React.MouseEvent, key, ifaceIds)} />
+                {/* Visible line */}
                 <line x1={src.x} y1={src.y} x2={tgt.x} y2={tgt.y}
                   stroke={stroke} strokeWidth={sw} style={{ pointerEvents: 'none' }} />
-                {count > 1 && (
-                  <g style={{ pointerEvents: 'none' }}>
-                    <rect x={mx - 10} y={my - 9} width={20} height={18} rx={4}
-                      fill="var(--sapTile_Background)" stroke={stroke} strokeWidth={1} />
-                    <text x={mx} y={my + 5} textAnchor="middle"
-                      fontSize={11} fontFamily="var(--sapFontFamily)" fill="var(--sapContent_LabelColor)" fontWeight={600}>
-                      {count}
-                    </text>
-                  </g>
-                )}
+                {/* Labels distributed along the line */}
+                {labels.map((label, li) => {
+                  const t  = (li + 1) / (labels.length + 1)
+                  const lx = src.x + t * (tgt.x - src.x)
+                  const ly = src.y + t * (tgt.y - src.y)
+                  const tw = label.length * 5.5 + 10
+                  return (
+                    <g key={li} style={{ pointerEvents: 'none' }}>
+                      <rect x={lx - tw / 2} y={ly - 9} width={tw} height={18} rx={4}
+                        fill="var(--sapTile_Background)" stroke={stroke} strokeWidth={1} />
+                      <text x={lx} y={ly + 5} textAnchor="middle"
+                        fontSize={11} fontFamily="var(--sapFontFamily)"
+                        fill={label === '…' ? 'var(--sapContent_LabelColor)' : stroke}
+                        fontWeight={600}>
+                        {label}
+                      </text>
+                    </g>
+                  )
+                })}
               </g>
             )
           })}

@@ -145,9 +145,21 @@ export default function InterfaceDetail({ iface, systems, config, onUpdate, onDe
 
         {editing ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <Field label="Name">
-              <Input value={form.name ?? ''} onInput={e => setForm(f => ({ ...f, name: (e.target as unknown as HTMLInputElement).value }))} style={{ width: '100%' }} />
-            </Field>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', alignItems: 'end' }}>
+              <Field label="Name">
+                <Input value={form.name ?? ''} onInput={e => setForm(f => ({ ...f, name: (e.target as unknown as HTMLInputElement).value }))} style={{ width: '100%' }} />
+              </Field>
+              <Field label="Ref (10 chars) *">
+                <Input
+                  value={form.interface_ref ?? ''}
+                  onInput={e => {
+                    const v = (e.target as unknown as HTMLInputElement).value.slice(0, 10).toUpperCase()
+                    setForm(f => ({ ...f, interface_ref: v }))
+                  }}
+                  style={{ width: '100px', fontFamily: 'monospace' }}
+                />
+              </Field>
+            </div>
             <Field label="Description">
               <Input value={form.description ?? ''} onInput={e => setForm(f => ({ ...f, description: (e.target as unknown as HTMLInputElement).value }))} style={{ width: '100%' }} />
             </Field>
@@ -216,6 +228,7 @@ export default function InterfaceDetail({ iface, systems, config, onUpdate, onDe
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapTextColor)' }}>
+            {iface.interface_ref && <InfoRow label="Ref"><code style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{iface.interface_ref}</code></InfoRow>}
             {iface.description && <p style={{ margin: 0, color: 'var(--sapContent_LabelColor)' }}>{iface.description}</p>}
             <InfoRow label="Sender">{senderName}</InfoRow>
             {iface.integration_platform && <InfoRow label="Platform">{iface.integration_platform}</InfoRow>}

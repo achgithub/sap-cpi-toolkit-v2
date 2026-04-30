@@ -26,6 +26,7 @@ type Interface struct {
 	InterfaceType        string            `json:"interface_type"`
 	Status               string            `json:"status"`
 	SenderSystemID       *string           `json:"sender_system_id"`
+	InterfaceRef         string            `json:"interface_ref"`
 	IntegrationPlatform  string            `json:"integration_platform"`
 	CpiPackageID         string            `json:"cpi_package_id"`
 	CpiIflowID           string            `json:"cpi_iflow_id"`
@@ -45,7 +46,7 @@ type Interface struct {
 }
 
 const ifaceCols = `id, project_id, name, description, interface_type, status, sender_system_id,
-	integration_platform, cpi_package_id, cpi_iflow_id, transport, auth_type, credential_alias,
+	interface_ref, integration_platform, cpi_package_id, cpi_iflow_id, transport, auth_type, credential_alias,
 	edge_style, edge_routing,
 	debug_trigger_enabled, debug_trigger_method, debug_trigger_path, debug_trigger_payload,
 	meta, created_at, updated_at`
@@ -160,13 +161,13 @@ func (h *Handler) createInterface(w http.ResponseWriter, r *http.Request) {
 	iface, err := scanInterface(h.pool.QueryRow(r.Context(),
 		`INSERT INTO interfaces
 		 (project_id, name, description, interface_type, status, sender_system_id,
-		  integration_platform, cpi_package_id, cpi_iflow_id, transport, auth_type, credential_alias,
+		  interface_ref, integration_platform, cpi_package_id, cpi_iflow_id, transport, auth_type, credential_alias,
 		  edge_style, edge_routing,
 		  debug_trigger_enabled, debug_trigger_method, debug_trigger_path, debug_trigger_payload, meta)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
 		 RETURNING `+ifaceCols,
 		pid, body.Name, body.Description, body.InterfaceType, body.Status, body.SenderSystemID,
-		body.IntegrationPlatform, body.CpiPackageID, body.CpiIflowID, body.Transport, body.AuthType, body.CredentialAlias,
+		body.InterfaceRef, body.IntegrationPlatform, body.CpiPackageID, body.CpiIflowID, body.Transport, body.AuthType, body.CredentialAlias,
 		body.EdgeStyle, body.EdgeRouting,
 		body.DebugTriggerEnabled, body.DebugTriggerMethod, body.DebugTriggerPath, body.DebugTriggerPayload,
 		metaJSON,
@@ -194,16 +195,16 @@ func (h *Handler) updateInterface(w http.ResponseWriter, r *http.Request) {
 	iface, err := scanInterface(h.pool.QueryRow(r.Context(),
 		`UPDATE interfaces SET
 		 name=$1, description=$2, interface_type=$3, status=$4, sender_system_id=$5,
-		 integration_platform=$6, cpi_package_id=$7, cpi_iflow_id=$8, transport=$9,
-		 auth_type=$10, credential_alias=$11,
-		 edge_style=$12, edge_routing=$13,
-		 debug_trigger_enabled=$14, debug_trigger_method=$15,
-		 debug_trigger_path=$16, debug_trigger_payload=$17,
-		 meta=$18, updated_at=now()
-		 WHERE id=$19 AND project_id=$20
+		 interface_ref=$6, integration_platform=$7, cpi_package_id=$8, cpi_iflow_id=$9, transport=$10,
+		 auth_type=$11, credential_alias=$12,
+		 edge_style=$13, edge_routing=$14,
+		 debug_trigger_enabled=$15, debug_trigger_method=$16,
+		 debug_trigger_path=$17, debug_trigger_payload=$18,
+		 meta=$19, updated_at=now()
+		 WHERE id=$20 AND project_id=$21
 		 RETURNING `+ifaceCols,
 		body.Name, body.Description, body.InterfaceType, body.Status, body.SenderSystemID,
-		body.IntegrationPlatform, body.CpiPackageID, body.CpiIflowID, body.Transport,
+		body.InterfaceRef, body.IntegrationPlatform, body.CpiPackageID, body.CpiIflowID, body.Transport,
 		body.AuthType, body.CredentialAlias,
 		body.EdgeStyle, body.EdgeRouting,
 		body.DebugTriggerEnabled, body.DebugTriggerMethod,
@@ -330,6 +331,7 @@ type interfaceBody struct {
 	InterfaceType       string            `json:"interface_type"`
 	Status              string            `json:"status"`
 	SenderSystemID      *string           `json:"sender_system_id"`
+	InterfaceRef        string            `json:"interface_ref"`
 	IntegrationPlatform string            `json:"integration_platform"`
 	CpiPackageID        string            `json:"cpi_package_id"`
 	CpiIflowID          string            `json:"cpi_iflow_id"`
@@ -364,7 +366,7 @@ func scanInterface(scan scanFn) (Interface, error) {
 	err := scan(
 		&iface.ID, &iface.ProjectID, &iface.Name, &iface.Description,
 		&iface.InterfaceType, &iface.Status, &iface.SenderSystemID,
-		&iface.IntegrationPlatform, &iface.CpiPackageID, &iface.CpiIflowID,
+		&iface.InterfaceRef, &iface.IntegrationPlatform, &iface.CpiPackageID, &iface.CpiIflowID,
 		&iface.Transport, &iface.AuthType, &iface.CredentialAlias,
 		&iface.EdgeStyle, &iface.EdgeRouting,
 		&iface.DebugTriggerEnabled, &iface.DebugTriggerMethod,

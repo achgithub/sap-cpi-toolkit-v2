@@ -17,14 +17,14 @@ interface Props {
 
 type SystemForm = { name: string; description: string; system_type: string; infra_type: string; infra_region: string }
 type IfaceForm  = {
-  name: string; description: string
+  name: string; description: string; interface_ref: string
   interface_type: IFInterface['interface_type']; status: IFInterface['status']
   sender_system_id: string | null; integration_platform: string
 }
 
 const emptySystem = (): SystemForm => ({ name: '', description: '', system_type: '', infra_type: '', infra_region: '' })
 const emptyIface  = (): IfaceForm  => ({
-  name: '', description: '', interface_type: 'point_to_point', status: 'design',
+  name: '', description: '', interface_ref: '', interface_type: 'point_to_point', status: 'design',
   sender_system_id: null, integration_platform: '',
 })
 
@@ -113,6 +113,7 @@ export default function RegistryPanel({ systems, interfaces, config, selectedId,
                     <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--sapTextColor)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {iface.name}
                     </span>
+                    {iface.interface_ref && <span style={{ fontSize: '0.68rem', color: 'var(--sapContent_LabelColor)', fontFamily: 'monospace', flexShrink: 0 }}>{iface.interface_ref}</span>}
                     <span style={{ fontSize: '0.68rem', color: 'var(--sapContent_LabelColor)', flexShrink: 0 }}>{TYPE_LABELS[iface.interface_type]}</span>
                   </div>
                   {(iface.integration_platform || iface.receivers.length > 0) && (
@@ -229,7 +230,19 @@ export default function RegistryPanel({ systems, interfaces, config, selectedId,
       <Dialog open={ifaceDlg} headerText="New Interface" onClose={() => setIfaceDlg(false)} style={{ width: '480px', maxWidth: '95vw' }}>
         <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {error && <MessageStrip design="Negative" hideCloseButton>{error}</MessageStrip>}
-          <F label="Name"><Input value={ifaceForm.name} onInput={e => setIfaceForm(f => ({ ...f, name: (e.target as unknown as HTMLInputElement).value }))} style={{ width: '100%' }} /></F>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', alignItems: 'end' }}>
+            <F label="Name"><Input value={ifaceForm.name} onInput={e => setIfaceForm(f => ({ ...f, name: (e.target as unknown as HTMLInputElement).value }))} style={{ width: '100%' }} /></F>
+            <F label="Ref (10 chars) *">
+              <Input
+                value={ifaceForm.interface_ref}
+                onInput={e => {
+                  const v = (e.target as unknown as HTMLInputElement).value.slice(0, 10).toUpperCase()
+                  setIfaceForm(f => ({ ...f, interface_ref: v }))
+                }}
+                style={{ width: '100px', fontFamily: 'monospace' }}
+              />
+            </F>
+          </div>
           <F label="Description"><Input value={ifaceForm.description} onInput={e => setIfaceForm(f => ({ ...f, description: (e.target as unknown as HTMLInputElement).value }))} style={{ width: '100%' }} /></F>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
             <F label="Type">
