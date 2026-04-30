@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { ReactFlowProvider } from '@xyflow/react'
 import { useWorkspace } from '../../../context/WorkspaceContext'
 import { useRegistryData } from './useRegistryData'
 import DiagramCanvas from './DiagramCanvas'
@@ -62,16 +61,15 @@ function DiagramInner({ projectId }: { projectId: string }) {
             {data.error}
           </div>
         )}
-        <ReactFlowProvider>
-          <DiagramCanvas
-            systems={data.systems}
-            interfaces={data.interfaces}
-            config={data.config}
-            selectedIfaceId={selectedId}
-            onSelectIface={setSelectedId}
-            onNodeMoved={data.updateSystemPos}
-          />
-        </ReactFlowProvider>
+        <DiagramCanvas
+          projectId={projectId}
+          systems={data.systems}
+          interfaces={data.interfaces}
+          config={data.config}
+          selectedIfaceId={selectedId}
+          onSelectIface={setSelectedId}
+          onNodeMoved={data.updateSystemPos}
+        />
       </div>
 
       {/* Registry panel */}
