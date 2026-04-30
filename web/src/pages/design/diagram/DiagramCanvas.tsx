@@ -143,24 +143,34 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
     return map
   }, [interfaces])
 
-  // Initialise positions
+  // Track project so we know when it changes vs when a filter changes
+  const lastProjectId = useRef('')
+
+  // Initialise / re-layout positions
+  // - New project load → use DB-saved positions (or Dagre fallback)
+  // - Filter change on same project → always re-run Dagre on visible subset
+  //   so nodes pack tightly together
   useEffect(() => {
-    const pairList = Array.from(pairs.keys()).map(k => k.split('__') as [string, string])
-    const layout   = dagreLayout(systems, pairList)
+    const pairList    = Array.from(pairs.keys()).map(k => k.split('__') as [string, string])
+    const layout      = dagreLayout(systems, pairList)
+    const isNewProject = lastProjectId.current !== projectId
+    lastProjectId.current = projectId
+
     setPos(prev => {
-      const next = { ...prev }
+      const next = isNewProject ? {} : { ...prev }
       systems.forEach(s => {
-        if (!next[s.id]) {
+        if (isNewProject) {
           next[s.id] = (s.pos_x !== 0 || s.pos_y !== 0)
             ? { x: s.pos_x, y: s.pos_y }
             : (layout[s.id] ?? { x: 60, y: 60 })
+        } else {
+          // Filter changed — use fresh Dagre layout so nodes move close together
+          next[s.id] = layout[s.id] ?? prev[s.id] ?? { x: 60, y: 60 }
         }
       })
-      // Don't delete positions for systems not currently visible —
-      // they may just be hidden by a filter and will return with saved positions.
       return next
     })
-  }, [systems, pairs])
+  }, [projectId, systems, pairs])
 
   const ifaceIndex = useMemo(() => {
     const m = new Map<string, IFInterface>()
