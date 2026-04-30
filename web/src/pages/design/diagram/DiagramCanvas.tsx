@@ -156,7 +156,8 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
             : (layout[s.id] ?? { x: 60, y: 60 })
         }
       })
-      Object.keys(next).forEach(id => { if (!systems.find(s => s.id === id)) delete next[id] })
+      // Don't delete positions for systems not currently visible —
+      // they may just be hidden by a filter and will return with saved positions.
       return next
     })
   }, [systems, pairs])

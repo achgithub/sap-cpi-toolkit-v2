@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useWorkspace } from '../../../context/WorkspaceContext'
 import { useRegistryData } from './useRegistryData'
 import DiagramCanvas from './DiagramCanvas'
 import RegistryPanel from './RegistryPanel'
 import InterfaceDetail from './InterfaceDetail'
+import DiagramFilters, { type DiagramFilter, emptyFilter, isFilterEmpty } from './DiagramFilters'
 
 export default function DiagramView() {
   const { selectedProject } = useWorkspace()
@@ -27,52 +28,98 @@ export default function DiagramView() {
 function DiagramInner({ projectId }: { projectId: string }) {
   const data = useRegistryData(projectId)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [filter,     setFilter]     = useState<DiagramFilter>(emptyFilter)
 
   useEffect(() => {
     data.loadConfig()
     data.load()
   }, [projectId])
 
+  // Reset filter when project changes
+  useEffect(() => { setFilter(emptyFilter()) }, [projectId])
+
+  // ── Apply filters ───────────────────────────────────────────────────────────
+  const { filteredSystems, filteredInterfaces } = useMemo(() => {
+    let ifaces = data.interfaces
+
+    if (filter.statuses.length)
+      ifaces = ifaces.filter(i => filter.statuses.includes(i.status))
+    if (filter.ifaceTypes.length)
+      ifaces = ifaces.filter(i => filter.ifaceTypes.includes(i.interface_type))
+    if (filter.platforms.length)
+      ifaces = ifaces.filter(i => filter.platforms.length === 0 || filter.platforms.includes(i.integration_platform))
+    if (filter.systems.length) {
+      ifaces = ifaces.filter(iface => {
+        const senderOk   = iface.sender_system_id ? filter.systems.includes(iface.sender_system_id) : false
+        const receiverOk = iface.receivers.some(r => r.system_id ? filter.systems.includes(r.system_id) : false)
+        return senderOk || receiverOk
+      })
+    }
+
+    // Only show systems that participate in filtered interfaces
+    // (when no filter active, show all)
+    let systems = data.systems
+    if (!isFilterEmpty(filter)) {
+      const usedIds = new Set<string>()
+      ifaces.forEach(iface => {
+        if (iface.sender_system_id) usedIds.add(iface.sender_system_id)
+        iface.receivers.forEach(r => { if (r.system_id) usedIds.add(r.system_id) })
+      })
+      systems = data.systems.filter(s => usedIds.has(s.id))
+    }
+
+    return { filteredSystems: systems, filteredInterfaces: ifaces }
+  }, [data.systems, data.interfaces, filter])
+
   const selectedIface = selectedId ? data.interfaces.find(i => i.id === selectedId) ?? null : null
-  const detailWidth = selectedIface ? 360 : 0
+  const detailWidth   = selectedIface ? 360 : 0
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
 
-      {/* Canvas */}
-      <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-        {data.loading && (
-          <div style={{
-            position: 'absolute', inset: 0, zIndex: 10,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(255,255,255,0.6)',
-            fontFamily: 'var(--sapFontFamily)', fontSize: '0.875rem', color: 'var(--sapTextColor)',
-          }}>
-            Loading…
-          </div>
-        )}
-        {data.error && (
-          <div style={{
-            position: 'absolute', top: '1rem', left: '50%', transform: 'translateX(-50%)', zIndex: 10,
-            background: 'var(--sapNegativeBackground)', color: '#fff',
-            padding: '6px 16px', borderRadius: '4px',
-            fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem',
-          }}>
-            {data.error}
-          </div>
-        )}
-        <DiagramCanvas
-          projectId={projectId}
+      {/* Left column: filter bar + canvas */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <DiagramFilters
           systems={data.systems}
-          interfaces={data.interfaces}
           config={data.config}
-          selectedIfaceId={selectedId}
-          onSelectIface={setSelectedId}
-          onNodeMoved={data.updateSystemPos}
+          filter={filter}
+          onChange={setFilter}
         />
+
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          {data.loading && (
+            <div style={{
+              position: 'absolute', inset: 0, zIndex: 10,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(255,255,255,0.6)',
+              fontFamily: 'var(--sapFontFamily)', fontSize: '0.875rem', color: 'var(--sapTextColor)',
+            }}>
+              Loading…
+            </div>
+          )}
+          {data.error && (
+            <div style={{
+              position: 'absolute', top: '1rem', left: '50%', transform: 'translateX(-50%)', zIndex: 10,
+              background: 'var(--sapNegativeBackground)', color: '#fff',
+              padding: '6px 16px', borderRadius: '4px',
+              fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem',
+            }}>
+              {data.error}
+            </div>
+          )}
+          <DiagramCanvas
+            projectId={projectId}
+            systems={filteredSystems}
+            interfaces={filteredInterfaces}
+            config={data.config}
+            selectedIfaceId={selectedId}
+            onSelectIface={setSelectedId}
+            onNodeMoved={data.updateSystemPos}
+          />
+        </div>
       </div>
 
-      {/* Registry panel */}
+      {/* Registry panel — always shows all interfaces, not filtered */}
       <div style={{ width: '260px', flexShrink: 0, borderLeft: '1px solid var(--sapList_BorderColor)', background: 'var(--sapGroup_ContentBackground)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <RegistryPanel
           systems={data.systems}
