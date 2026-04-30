@@ -103,8 +103,8 @@ function buildGraph(
 // ── Custom node ───────────────────────────────────────────────────────────────
 
 // Left/right handles only — forces edges to stay horizontal between Dagre ranks.
-// display:none keeps them invisible while remaining functional for edge routing.
-const HIDDEN: React.CSSProperties = { display: 'none' }
+// opacity:0 keeps them invisible but in the DOM so React Flow can measure positions.
+const HIDDEN: React.CSSProperties = { opacity: 0, width: 8, height: 8, border: 'none' }
 
 function SystemNode({ data }: { data: { system: IFSystem; color: string } }) {
   const { system: s, color } = data
