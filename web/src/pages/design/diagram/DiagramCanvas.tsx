@@ -128,20 +128,26 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
   // Reload colours if project changes
   useEffect(() => { setEdgeColors(loadColors(projectId)) }, [projectId])
 
-  // Connection pairs (undirected, deduped)
+  // Connection pairs (undirected, deduped).
+  // Only draw lines between systems that are actually visible — broadcast
+  // interfaces can have receivers outside the current filter set and those
+  // would draw lines off into empty space.
   const pairs = useMemo(() => {
+    const visibleIds = new Set(systems.map(s => s.id))
     const map = new Map<string, string[]>()
     interfaces.forEach(iface => {
       if (!iface.sender_system_id) return
+      if (!visibleIds.has(iface.sender_system_id)) return
       iface.receivers.forEach(rec => {
         if (!rec.system_id || rec.system_id === iface.sender_system_id) return
+        if (!visibleIds.has(rec.system_id)) return   // receiver off-screen — skip
         const key = [iface.sender_system_id!, rec.system_id].sort().join('__')
         if (!map.has(key)) map.set(key, [])
         map.get(key)!.push(iface.id)
       })
     })
     return map
-  }, [interfaces])
+  }, [systems, interfaces])
 
   // Track project so we know when it changes vs when a filter changes
   const lastProjectId = useRef('')
