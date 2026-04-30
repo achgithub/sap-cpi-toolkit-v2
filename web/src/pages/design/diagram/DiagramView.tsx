@@ -46,17 +46,17 @@ function DiagramInner({ projectId }: { projectId: string }) {
     if (filter.statuses.length)
       ifaces = ifaces.filter(i => filter.statuses.includes(i.status))
 
-    // Infra filter: build a pool of system IDs that match the selected infra types,
-    // then apply the same strict both-ends-in-pool logic as the system filter.
-    // Selecting "AWS" shows only AWS↔AWS interfaces.
-    // Selecting "On-Prem"+"AWS" shows On-Prem↔On-Prem, AWS↔AWS, and On-Prem↔AWS.
-    if (filter.infraTypes.length) {
-      const pool = new Set(
-        data.systems.filter(s => filter.infraTypes.includes(s.infra_type)).map(s => s.id)
-      )
+    // Build infra pool once — used for both interface filtering and visible systems
+    const infraPool = filter.infraTypes.length
+      ? new Set(data.systems.filter(s => filter.infraTypes.includes(s.infra_type)).map(s => s.id))
+      : null
+
+    // Infra filter: both sender and at least one receiver must be in the pool.
+    // "AWS" → only AWS↔AWS. "On-Prem+AWS" → any combination of those two.
+    if (infraPool) {
       ifaces = ifaces.filter(iface => {
-        const senderIn   = !!iface.sender_system_id && pool.has(iface.sender_system_id)
-        const receiverIn = iface.receivers.some(r => !!r.system_id && pool.has(r.system_id))
+        const senderIn   = !!iface.sender_system_id && infraPool.has(iface.sender_system_id)
+        const receiverIn = iface.receivers.some(r => !!r.system_id && infraPool.has(r.system_id))
         return senderIn && receiverIn
       })
     }
@@ -74,10 +74,19 @@ function DiagramInner({ projectId }: { projectId: string }) {
     // Visible systems
     let systems = data.systems
     if (filter.systems.length) {
-      // System filter active: show exactly the selected systems
+      // Exact selection
       systems = data.systems.filter(s => filter.systems.includes(s.id))
-    } else if (filter.statuses.length || filter.infraTypes.length) {
-      // Other filters: hide systems not involved in any remaining interface
+    } else if (infraPool) {
+      // Infra filter: only systems inside the pool that participate in filtered interfaces.
+      // Do NOT include non-pool systems even if they appear as receivers in broadcast interfaces.
+      const usedIds = new Set<string>()
+      ifaces.forEach(iface => {
+        if (iface.sender_system_id) usedIds.add(iface.sender_system_id)
+        iface.receivers.forEach(r => { if (r.system_id) usedIds.add(r.system_id) })
+      })
+      systems = data.systems.filter(s => infraPool.has(s.id) && usedIds.has(s.id))
+    } else if (filter.statuses.length) {
+      // Status filter only: hide systems with no remaining interfaces
       const usedIds = new Set<string>()
       ifaces.forEach(iface => {
         if (iface.sender_system_id) usedIds.add(iface.sender_system_id)
