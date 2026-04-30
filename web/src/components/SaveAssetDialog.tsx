@@ -37,6 +37,7 @@ export default function SaveAssetDialog({
   const [busy,          setBusy]          = useState(false)
   const [error,         setError]         = useState('')
   const [saved,         setSaved]         = useState(false)
+  const [duplicate,     setDuplicate]     = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -47,14 +48,15 @@ export default function SaveAssetDialog({
       setPinSubProject(false)
       setError('')
       setSaved(false)
+      setDuplicate(false)
     }
   }, [open, defaultName, defaultType, content, selectedProject])
 
   const activeContent = allowEditContent ? editedContent : content
 
-  async function save() {
+  async function save(overwrite = false) {
     if (!name.trim()) return
-    setBusy(true); setError('')
+    setBusy(true); setError(''); setDuplicate(false)
     try {
       const body: Record<string, unknown> = {
         name: name.trim(),
@@ -64,11 +66,16 @@ export default function SaveAssetDialog({
         project_id:     pinProject && selectedProject ? selectedProject.id : null,
         sub_project_id: pinProject && pinSubProject && selectedSubProject ? selectedSubProject.id : null,
       }
-      const res = await fetch('/api/v2/assets', {
+      const url = overwrite ? '/api/v2/assets?overwrite=true' : '/api/v2/assets'
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
+      if (res.status === 409) {
+        setDuplicate(true)
+        return
+      }
       if (!res.ok) {
         const j = await res.json().catch(() => ({})) as { error?: string }
         throw new Error(j.error ?? `HTTP ${res.status}`)
@@ -90,6 +97,14 @@ export default function SaveAssetDialog({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' }}>
 
         {error && <MessageStrip design="Negative" hideCloseButton>{error}</MessageStrip>}
+        {duplicate && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <MessageStrip design="Critical" hideCloseButton>
+              An asset named <strong>"{name.trim()}"</strong> ({assetType}) already exists.
+            </MessageStrip>
+            <Button design="Negative" onClick={() => save(true)}>Overwrite existing</Button>
+          </div>
+        )}
 
         <div>
           <Label style={labelStyle}>Name *</Label>
@@ -155,8 +170,8 @@ export default function SaveAssetDialog({
       <Bar slot="footer">
         <BusyIndicator slot="startContent" active={busy} />
         <Button slot="endContent" design="Emphasized"
-          disabled={!name.trim() || !activeContent.trim() || busy || saved}
-          onClick={save}>
+          disabled={!name.trim() || !activeContent.trim() || busy || saved || duplicate}
+          onClick={() => save()}>
           {saved ? 'Saved!' : 'Save'}
         </Button>
         <Button slot="endContent" design="Transparent" onClick={onClose}>Cancel</Button>

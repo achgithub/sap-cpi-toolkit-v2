@@ -104,6 +104,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /scaffold/preflight", h.scaffoldPreflight)
 	mux.HandleFunc("POST /scaffold/upload",    h.scaffoldUpload)
 
+	// Scaffold Templates (adapter BPMN snippets)
+	mux.HandleFunc("GET /scaffold/templates",             h.listScaffoldTemplates)
+	mux.HandleFunc("GET /scaffold/templates/{key}",       h.getScaffoldTemplate)
+	mux.HandleFunc("PUT /scaffold/templates/{key}",       h.updateScaffoldTemplate)
+	mux.HandleFunc("POST /scaffold/templates/{key}/reset", h.resetScaffoldTemplate)
+
 	// SFTP Server — config
 	mux.HandleFunc("GET /sftp-server",            h.getSFTPServer)
 	mux.HandleFunc("GET /sftp-server/config",     h.getSFTPConfig)

@@ -10,29 +10,36 @@ import (
 
 // SeedGroovyScripts inserts the built-in Groovy library scripts as assets
 // (type='groovy') if none exist yet. Safe to call on every startup.
+// SeedGroovyScripts inserts built-in Groovy scripts that don't already exist by name.
+// Scripts the user has deleted stay deleted — this never re-inserts them.
 func SeedGroovyScripts(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) {
-	var count int
-	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM assets WHERE type='groovy' AND meta->>'builtin'='true'`).Scan(&count); err != nil {
-		log.Error("groovy seed: count check failed", "error", err)
-		return
-	}
-	if count >= len(groovySeeds) { //nolint:gocritic
-		return
-	}
-	log.Info("seeding built-in Groovy scripts", "count", len(groovySeeds))
+	inserted := 0
 	for _, s := range groovySeeds {
+		var exists bool
+		if err := pool.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM assets WHERE name=$1 AND type='groovy' AND meta->>'builtin'='true')`,
+			s.name,
+		).Scan(&exists); err != nil {
+			log.Error("groovy seed: existence check failed", "name", s.name, "error", err)
+			continue
+		}
+		if exists {
+			continue
+		}
 		metaJSON, _ := json.Marshal(s.meta)
-		_, err := pool.Exec(ctx, `
+		if _, err := pool.Exec(ctx, `
 			INSERT INTO assets (name, type, content, meta, created_by)
-			VALUES ($1, 'groovy', $2, $3, 'system')
-			ON CONFLICT DO NOTHING`,
+			VALUES ($1, 'groovy', $2, $3, 'system')`,
 			s.name, s.body, metaJSON,
-		)
-		if err != nil {
+		); err != nil {
 			log.Error("groovy seed: insert failed", "name", s.name, "error", err)
+		} else {
+			inserted++
 		}
 	}
-	log.Info("groovy seed complete")
+	if inserted > 0 {
+		log.Info("groovy seed: added new built-in scripts", "count", inserted)
+	}
 }
 
 type groovySeed struct {
@@ -870,29 +877,30 @@ def Message processData(Message message) {
 			Builtin:    true,
 		},
 		body: `import com.sap.gateway.ip.core.customdev.util.Message
+import groovy.xml.XmlSlurper
 import groovy.xml.XmlUtil
+import java.text.SimpleDateFormat
 
 def Message processData(Message message) {
     def body = message.getBody(String.class)
+    def root = new XmlSlurper().parseText(body)
+    def count = 0
 
-    // Parse XML, increment every <Quantity> element
-    def root = new XmlSlurper(false, false).parseText(body)
-    def incremented = 0
     root.'**'.findAll { it.name() == 'Quantity' }.each { node ->
         def val = node.text().trim()
         if (val.isInteger()) {
             node.replaceBody((val.toInteger() + 1).toString())
-            incremented++
+            count++
         }
     }
 
-    // Write mutated XML back as message body
     message.setBody(XmlUtil.serialize(root))
+    message.setHeader('X-Processed-By',        'CPI-Toolkit-Groovy')
+    message.setHeader('X-Quantity-Incremented', count.toString())
 
-    // Trace headers
-    message.setHeader('X-Processed-By',          'CPI-Toolkit-Groovy')
-    message.setHeader('X-Quantity-Incremented',   incremented.toString())
-    message.setHeader('X-Processed-At',           new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC')))
+    def sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    sdf.setTimeZone(TimeZone.getTimeZone('UTC'))
+    message.setHeader('X-Processed-At', sdf.format(new Date()))
 
     return message
 }`,

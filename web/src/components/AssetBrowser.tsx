@@ -123,7 +123,7 @@ export default function AssetBrowser({ open, onClose, onSelect, filterType, titl
 
   const visible = assets.filter(a => {
     if (typeFilter !== 'all' && a.type !== typeFilter) return false
-    if (projectOnly && selectedProject && a.project_id !== selectedProject.id) return false
+    if (projectOnly && selectedProject && a.project_id !== selectedProject.id && a.project_id !== null) return false
     if (search) {
       const q = search.toLowerCase()
       return a.name.toLowerCase().includes(q) || a.type.toLowerCase().includes(q)

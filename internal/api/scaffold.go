@@ -126,27 +126,17 @@ func (h *Handler) scaffoldGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	inst, err := h.loadScaffoldInstance(r.Context(), req.InstanceID)
-	if isNotFound(err) {
-		apiError(w, 404, "instance not found")
-		return
-	}
-	if err != nil {
-		h.log.Error("scaffold: load instance", "error", err)
-		apiError(w, 500, "internal error")
-		return
-	}
-	if !scaffoldAllowedTypes[inst.SystemType] {
-		apiError(w, 403, fmt.Sprintf("iFlow Scaffold is not permitted for %s environments — restricted to TRL, SBX, DEV only", inst.SystemType))
-		return
-	}
+	// Download does not require an instance — ZIP is generated locally.
+	// Instance restriction (SBX/TRL/DEV only) is enforced at upload time.
 
-	zipBytes, err := generateScaffoldZIP(req)
+	zipBytes, err := h.generateScaffoldZIP(r.Context(), req)
 	if err != nil {
 		h.log.Error("scaffold: generate zip", "error", err)
 		apiError(w, 500, "generation failed: "+err.Error())
 		return
 	}
+
+	h.log.Info("scaffold: generated zip", "iflow", req.IFlowID, "bytes", len(zipBytes))
 
 	filename := req.IFlowID + ".zip"
 	w.Header().Set("Content-Type", "application/zip")
@@ -261,7 +251,7 @@ func (h *Handler) scaffoldUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	zipBytes, err := generateScaffoldZIP(req)
+	zipBytes, err := h.generateScaffoldZIP(r.Context(), req)
 	if err != nil {
 		apiError(w, 500, "generation failed: "+err.Error())
 		return
@@ -405,7 +395,8 @@ func scaffoldUpsertArtifact(ctx context.Context, client *http.Client, apiBase, t
 
 // ── ZIP builder ────────────────────────────────────────────────────────────────
 
-func generateScaffoldZIP(req ScaffoldRequest) ([]byte, error) {
+func (h *Handler) generateScaffoldZIP(ctx context.Context, req ScaffoldRequest) ([]byte, error) {
+	templates := LoadScaffoldTemplates(ctx, h.pool)
 	groovyName := req.GroovyName
 	if groovyName == "" {
 		groovyName = "script"
@@ -446,7 +437,7 @@ func generateScaffoldZIP(req ScaffoldRequest) ([]byte, error) {
 	}
 
 	files["src/main/resources/scenarioflows/integrationflow/"+safeIFlowName+".iflw"] =
-		generateIFlowXML(req, groovyName, xsltName)
+		generateIFlowXML(templates, req, groovyName, xsltName)
 
 	for path, content := range files {
 		f, err := zw.Create(path)
@@ -457,7 +448,10 @@ func generateScaffoldZIP(req ScaffoldRequest) ([]byte, error) {
 			return nil, err
 		}
 	}
-	return buf.Bytes(), zw.Close()
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // ── Stubs ──────────────────────────────────────────────────────────────────────

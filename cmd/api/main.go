@@ -53,6 +53,7 @@ func main() {
 	log.Info("migrations complete")
 
 	api.SeedGroovyScripts(ctx, pool, log)
+	api.SeedScaffoldTemplates(ctx, pool, log)
 
 	mux := http.NewServeMux()
 

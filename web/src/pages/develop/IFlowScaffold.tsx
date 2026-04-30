@@ -28,6 +28,16 @@ function toScreamingSnakeCase(s: string): string {
     .replace(/_$/g, '')
 }
 
+// CPI package IDs: alphanumeric only, no underscores/hyphens — PascalCase each word
+function toPackageId(s: string): string {
+  return s
+    .replace(/[^a-zA-Z0-9\s]/g, '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join('')
+}
+
 function inp(e: { target: unknown }): string {
   return (e.target as unknown as InputDomRef).value ?? ''
 }
@@ -264,10 +274,15 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
       {/* Step 1: Identity */}
       {step === 1 && (
         <FormSection title="1 — Identity" subtitle="iFlow name, ID and package">
-          <FormRow label="iFlow Display Name" required>
+          <FormRow label="iFlow Display Name" required hint="Letters, numbers, spaces, hyphens, underscores only — no special chars">
             <Input value={form.name} placeholder="e.g. SFTP to HTTP - Orders"
               style={{ width: '100%' }} disabled={disabled}
-              onInput={e => patch({ name: inp(e), iflowId: toScreamingSnakeCase(inp(e)) })} />
+              onInput={e => {
+                // Sanitise on input: strip chars CPI rejects, replace em/en dashes with hyphen
+                const raw = inp(e)
+                const safe = raw.replace(/[—–]/g, '-').replace(/[^a-zA-Z0-9 ._\-]/g, '')
+                patch({ name: safe, iflowId: toScreamingSnakeCase(safe) })
+              }} />
           </FormRow>
           <FormRow label="iFlow ID" required hint="Auto-generated, editable — must start with letter or underscore">
             <Input value={form.iflowId} placeholder="SFTP_TO_HTTP_ORDERS"
@@ -277,7 +292,7 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
           <FormRow label="Package Name">
             <Input value={form.packageName} placeholder="e.g. Orders Integration"
               style={{ width: '100%' }} disabled={disabled}
-              onInput={e => patch({ packageName: inp(e), packageId: toScreamingSnakeCase(inp(e)) })} />
+              onInput={e => patch({ packageName: inp(e), packageId: toPackageId(inp(e)) })} />
           </FormRow>
           <FormRow label="Package ID" hint="Auto-generated, editable">
             <Input value={form.packageId} placeholder="ORDERS_INTEGRATION"

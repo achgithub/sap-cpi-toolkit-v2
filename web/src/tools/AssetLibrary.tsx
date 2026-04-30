@@ -169,7 +169,7 @@ export default function AssetLibrary() {
 
   const visible = assets.filter(a => {
     if (typeFilter !== 'all' && a.type !== typeFilter) return false
-    if (projectFilter !== 'all' && a.project_id !== projectFilter) return false
+    if (projectFilter !== 'all' && a.project_id !== projectFilter && a.project_id !== null) return false
     if (search) {
       const q = search.toLowerCase()
       return a.name.toLowerCase().includes(q) ||

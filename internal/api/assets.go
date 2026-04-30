@@ -110,22 +110,50 @@ func (h *Handler) createAsset(w http.ResponseWriter, r *http.Request) {
 		body.Meta = json.RawMessage("{}")
 	}
 
+	// Honour ?overwrite=true — updates the existing asset if name+type+scope match.
+	overwrite := r.URL.Query().Get("overwrite") == "true"
+
 	var a AssetDetail
 	var metaBytes []byte
-	err := h.pool.QueryRow(r.Context(), `
-		INSERT INTO assets (name, type, content, meta, project_id, sub_project_id, created_by)
-		VALUES ($1, $2, $3, $4, $5::uuid, $6::uuid, $7)
-		RETURNING id, name, type, content, meta,
-		          project_id::text, sub_project_id::text,
-		          created_by, created_at, updated_at`,
-		body.Name, body.Type, body.Content, []byte(body.Meta),
-		nullableUUID(body.ProjectID), nullableUUID(body.SubProjectID),
-		userID(r),
-	).Scan(
-		&a.ID, &a.Name, &a.Type, &a.Content, &metaBytes,
-		&a.ProjectID, &a.SubProjectID,
-		&a.CreatedBy, &a.CreatedAt, &a.UpdatedAt,
-	)
+	var err error
+
+	if overwrite {
+		err = h.pool.QueryRow(r.Context(), `
+			INSERT INTO assets (name, type, content, meta, project_id, sub_project_id, created_by)
+			VALUES ($1, $2, $3, $4, $5::uuid, $6::uuid, $7)
+			ON CONFLICT (lower(name), type, COALESCE(project_id::text, ''))
+			DO UPDATE SET content=EXCLUDED.content, meta=EXCLUDED.meta, updated_at=now()
+			RETURNING id, name, type, content, meta,
+			          project_id::text, sub_project_id::text,
+			          created_by, created_at, updated_at`,
+			body.Name, body.Type, body.Content, []byte(body.Meta),
+			nullableUUID(body.ProjectID), nullableUUID(body.SubProjectID),
+			userID(r),
+		).Scan(
+			&a.ID, &a.Name, &a.Type, &a.Content, &metaBytes,
+			&a.ProjectID, &a.SubProjectID,
+			&a.CreatedBy, &a.CreatedAt, &a.UpdatedAt,
+		)
+	} else {
+		err = h.pool.QueryRow(r.Context(), `
+			INSERT INTO assets (name, type, content, meta, project_id, sub_project_id, created_by)
+			VALUES ($1, $2, $3, $4, $5::uuid, $6::uuid, $7)
+			RETURNING id, name, type, content, meta,
+			          project_id::text, sub_project_id::text,
+			          created_by, created_at, updated_at`,
+			body.Name, body.Type, body.Content, []byte(body.Meta),
+			nullableUUID(body.ProjectID), nullableUUID(body.SubProjectID),
+			userID(r),
+		).Scan(
+			&a.ID, &a.Name, &a.Type, &a.Content, &metaBytes,
+			&a.ProjectID, &a.SubProjectID,
+			&a.CreatedBy, &a.CreatedAt, &a.UpdatedAt,
+		)
+		if err != nil && strings.Contains(err.Error(), "assets_unique_name_type_scope") {
+			apiError(w, 409, fmt.Sprintf("an asset named %q (%s) already exists", body.Name, body.Type))
+			return
+		}
+	}
 	if err != nil {
 		h.log.Error("create asset", "error", err)
 		apiError(w, 500, "internal error")

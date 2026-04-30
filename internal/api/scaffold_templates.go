@@ -56,7 +56,12 @@ var scaffoldDefaultTemplates = map[string]string{
             </bpmn2:extensionElements>
         </bpmn2:participant>`,
 
-	"receiver_participant_HTTP":  "\n        <bpmn2:participant id=\"Participant_Receiver\" name=\"Receiver1\"/>",
+	"receiver_participant_HTTP": `
+        <bpmn2:participant id="Participant_Receiver" ifl:type="EndpointRecevier" name="Receiver1">
+            <bpmn2:extensionElements>
+                <ifl:property><key>ifl:type</key><value>EndpointRecevier</value></ifl:property>
+            </bpmn2:extensionElements>
+        </bpmn2:participant>`,
 
 	"receiver_participant_SFTP": `
         <bpmn2:participant id="Participant_Receiver" ifl:type="EndpointRecevier" name="Receiver1">
@@ -146,22 +151,39 @@ var scaffoldDefaultTemplates = map[string]string{
             <bpmn2:extensionElements>
                 <ifl:property><key>ComponentType</key><value>HTTP</value></ifl:property>
                 <ifl:property><key>ComponentNS</key><value>sap</value></ifl:property>
-                <ifl:property><key>componentVersion</key><value>1.10</value></ifl:property>
+                <ifl:property><key>componentVersion</key><value>1.17</value></ifl:property>
                 <ifl:property><key>Name</key><value>HTTP</value></ifl:property>
                 <ifl:property><key>system</key><value>Receiver1</value></ifl:property>
                 <ifl:property><key>Description</key><value/></ifl:property>
-                <ifl:property><key>address</key><value>{{.HTTPReceiverURL}}</value></ifl:property>
+                <ifl:property><key>httpAddressWithoutQuery</key><value>{{.HTTPReceiverURL}}</value></ifl:property>
                 <ifl:property><key>httpMethod</key><value>POST</value></ifl:property>
-                <ifl:property><key>authType</key><value>BasicAuthentication</value></ifl:property>
+                <ifl:property><key>authenticationMethod</key><value>Client Certificate</value></ifl:property>
                 <ifl:property><key>credentialName</key><value>{{.HTTPReceiverCredential}}</value></ifl:property>
+                <ifl:property><key>privateKeyAlias</key><value/></ifl:property>
                 <ifl:property><key>httpRequestTimeout</key><value>60000</value></ifl:property>
+                <ifl:property><key>throwExceptionOnFailure</key><value>true</value></ifl:property>
+                <ifl:property><key>httpShouldSendBody</key><value>false</value></ifl:property>
+                <ifl:property><key>allowedResponseHeaders</key><value>*</value></ifl:property>
+                <ifl:property><key>allowedRequestHeaders</key><value/></ifl:property>
+                <ifl:property><key>enableMPLAttachments</key><value>true</value></ifl:property>
+                <ifl:property><key>streaming</key><value>false</value></ifl:property>
+                <ifl:property><key>proxyType</key><value>default</value></ifl:property>
+                <ifl:property><key>locationID</key><value/></ifl:property>
+                <ifl:property><key>proxyHost</key><value/></ifl:property>
+                <ifl:property><key>proxyPort</key><value/></ifl:property>
+                <ifl:property><key>internetProxyType</key><value/></ifl:property>
+                <ifl:property><key>httpAddressQuery</key><value/></ifl:property>
+                <ifl:property><key>retryOnConnectionFailure</key><value>false</value></ifl:property>
+                <ifl:property><key>retryIteration</key><value>1</value></ifl:property>
+                <ifl:property><key>retryInterval</key><value>5</value></ifl:property>
+                <ifl:property><key>direction</key><value>Receiver</value></ifl:property>
                 <ifl:property><key>TransportProtocol</key><value>HTTP</value></ifl:property>
                 <ifl:property><key>MessageProtocol</key><value>None</value></ifl:property>
-                <ifl:property><key>TransportProtocolVersion</key><value>1.10.0</value></ifl:property>
-                <ifl:property><key>MessageProtocolVersion</key><value>1.10.0</value></ifl:property>
+                <ifl:property><key>TransportProtocolVersion</key><value>1.17.0</value></ifl:property>
+                <ifl:property><key>MessageProtocolVersion</key><value>1.17.0</value></ifl:property>
                 <ifl:property><key>ComponentSWCVName</key><value>external</value></ifl:property>
-                <ifl:property><key>ComponentSWCVId</key><value>1.10.0</value></ifl:property>
-                <ifl:property><key>cmdVariantUri</key><value>ctype::AdapterVariant/cname::sap:HTTP/tp::HTTP/mp::None/direction::Receiver/version::1.10.0</value></ifl:property>
+                <ifl:property><key>ComponentSWCVId</key><value>1.17.0</value></ifl:property>
+                <ifl:property><key>cmdVariantUri</key><value>ctype::AdapterVariant/cname::sap:HTTP/tp::HTTP/mp::None/direction::Receiver/version::1.17.0</value></ifl:property>
             </bpmn2:extensionElements>
         </bpmn2:messageFlow>`,
 
@@ -295,8 +317,8 @@ var scaffoldDefaultTemplates = map[string]string{
         </bpmn2:subProcess>`,
 }
 
-func renderScaffoldFragment(key string, data scaffoldTmplData) string {
-	src, ok := scaffoldDefaultTemplates[key]
+func renderScaffoldFragment(templates map[string]string, key string, data scaffoldTmplData) string {
+	src, ok := templates[key]
 	if !ok {
 		return fmt.Sprintf("<!-- unknown scaffold fragment: %s -->", key)
 	}
@@ -312,7 +334,7 @@ func renderScaffoldFragment(key string, data scaffoldTmplData) string {
 }
 
 // generateIFlowXML builds the full BPMN iFlow XML.
-func generateIFlowXML(req ScaffoldRequest, groovyName, xsltName string) string {
+func generateIFlowXML(templates map[string]string, req ScaffoldRequest, groovyName, xsltName string) string {
 	type flowStep struct{ ID, Name string; X, Y float64 }
 
 	var steps []flowStep
@@ -391,18 +413,18 @@ func generateIFlowXML(req ScaffoldRequest, groovyName, xsltName string) string {
 `)
 
 	b.WriteString("\n    <bpmn2:collaboration id=\"Collaboration_1\" name=\"Default Collaboration\">\n")
-	b.WriteString(renderScaffoldFragment("collaboration_ext", base))
+	b.WriteString(renderScaffoldFragment(templates, "collaboration_ext", base))
 	b.WriteString("\n")
-	b.WriteString(renderScaffoldFragment("sender_participant_"+req.SenderAdapter, base))
+	b.WriteString(renderScaffoldFragment(templates, "sender_participant_"+req.SenderAdapter, base))
 	b.WriteString(`
         <bpmn2:participant id="Participant_Process_1" ifl:type="IntegrationProcess"
             name="Integration Process" processRef="Process_1">
             <bpmn2:extensionElements/>
         </bpmn2:participant>
 `)
-	b.WriteString(renderScaffoldFragment("receiver_participant_"+req.ReceiverAdapter, base))
-	b.WriteString(renderScaffoldFragment("sender_messageflow_"+req.SenderAdapter, base))
-	b.WriteString(renderScaffoldFragment("receiver_messageflow_"+req.ReceiverAdapter, base))
+	b.WriteString(renderScaffoldFragment(templates, "receiver_participant_"+req.ReceiverAdapter, base))
+	b.WriteString(renderScaffoldFragment(templates, "sender_messageflow_"+req.SenderAdapter, base))
+	b.WriteString(renderScaffoldFragment(templates, "receiver_messageflow_"+req.ReceiverAdapter, base))
 	b.WriteString("\n    </bpmn2:collaboration>\n")
 
 	b.WriteString(`
@@ -429,7 +451,7 @@ func generateIFlowXML(req ScaffoldRequest, groovyName, xsltName string) string {
 	cmData := base
 	cmData.SFIn = seqFlows[cmIdx-1].id
 	cmData.SFOut = seqFlows[cmIdx].id
-	b.WriteString(renderScaffoldFragment("step_content_modifier", cmData))
+	b.WriteString(renderScaffoldFragment(templates, "step_content_modifier", cmData))
 
 	if req.IncludeGroovy {
 		idx := scaffoldIndexOf(allIDs, "CallActivity_Groovy")
@@ -437,7 +459,7 @@ func generateIFlowXML(req ScaffoldRequest, groovyName, xsltName string) string {
 		gData.GroovyName = groovyName
 		gData.SFIn = seqFlows[idx-1].id
 		gData.SFOut = seqFlows[idx].id
-		b.WriteString(renderScaffoldFragment("step_groovy", gData))
+		b.WriteString(renderScaffoldFragment(templates, "step_groovy", gData))
 	}
 
 	if req.IncludeXSLT {
@@ -446,7 +468,7 @@ func generateIFlowXML(req ScaffoldRequest, groovyName, xsltName string) string {
 		xData.XSLTName = xsltName
 		xData.SFIn = seqFlows[idx-1].id
 		xData.SFOut = seqFlows[idx].id
-		b.WriteString(renderScaffoldFragment("step_xslt", xData))
+		b.WriteString(renderScaffoldFragment(templates, "step_xslt", xData))
 	}
 
 	fmt.Fprintf(&b, `
@@ -460,7 +482,7 @@ func generateIFlowXML(req ScaffoldRequest, groovyName, xsltName string) string {
         </bpmn2:endEvent>
 `, lastSF)
 
-	b.WriteString(renderScaffoldFragment("step_exception_subprocess", base))
+	b.WriteString(renderScaffoldFragment(templates, "step_exception_subprocess", base))
 
 	for _, sf := range seqFlows {
 		fmt.Fprintf(&b, "        <bpmn2:sequenceFlow id=%q sourceRef=%q targetRef=%q/>\n", sf.id, sf.from, sf.to)
