@@ -46,17 +46,18 @@ function DiagramInner({ projectId }: { projectId: string }) {
     if (filter.statuses.length)
       ifaces = ifaces.filter(i => filter.statuses.includes(i.status))
 
-    // Infra filter: find systems with matching infra_type, then keep interfaces
-    // where any connected system (sender or receiver) has that infra type.
-    // Shows what connects TO/FROM those infra environments.
+    // Infra filter: build a pool of system IDs that match the selected infra types,
+    // then apply the same strict both-ends-in-pool logic as the system filter.
+    // Selecting "AWS" shows only AWS↔AWS interfaces.
+    // Selecting "On-Prem"+"AWS" shows On-Prem↔On-Prem, AWS↔AWS, and On-Prem↔AWS.
     if (filter.infraTypes.length) {
-      const infraSystemIds = new Set(
+      const pool = new Set(
         data.systems.filter(s => filter.infraTypes.includes(s.infra_type)).map(s => s.id)
       )
       ifaces = ifaces.filter(iface => {
-        const senderMatch   = !!iface.sender_system_id && infraSystemIds.has(iface.sender_system_id)
-        const receiverMatch = iface.receivers.some(r => !!r.system_id && infraSystemIds.has(r.system_id))
-        return senderMatch || receiverMatch
+        const senderIn   = !!iface.sender_system_id && pool.has(iface.sender_system_id)
+        const receiverIn = iface.receivers.some(r => !!r.system_id && pool.has(r.system_id))
+        return senderIn && receiverIn
       })
     }
 
