@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button, Input, MessageStrip } from '@ui5/webcomponents-react'
-import type { SystemTypeConfig, InfraTypeConfig, PlatformConfig } from '../pages/design/diagram/types'
+import type { SystemTypeConfig, InfraTypeConfig, PlatformConfig } from '../pages/registry/types'
 
 const BASE = '/api/interfaces/config'
 

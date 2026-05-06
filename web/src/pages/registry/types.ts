@@ -69,10 +69,14 @@ export interface DiagramEdge {
   statuses:           string[]
 }
 
+export interface SystemTypeConfig { name: string; color: string }
+export interface InfraTypeConfig  { name: string; category: 'cloud' | 'on_prem' | 'hybrid' }
+export interface PlatformConfig   { name: string }
+
 export interface RegistryConfig {
-  systemTypes:  { name: string; color: string }[]
-  infraTypes:   { name: string; category: 'cloud' | 'on_prem' | 'hybrid' }[]
-  platforms:    { name: string }[]
+  systemTypes:  SystemTypeConfig[]
+  infraTypes:   InfraTypeConfig[]
+  platforms:    PlatformConfig[]
 }
 
 export const STATUSES        = ['design', 'dev', 'test', 'active', 'deprecated'] as const

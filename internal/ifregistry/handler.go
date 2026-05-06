@@ -48,6 +48,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /interfaces/{id}/dependencies",         h.addDependency)
 	mux.HandleFunc("DELETE /interfaces/{id}/dependencies/{did}", h.deleteDependency)
 
+	// Flow diagram state
+	mux.HandleFunc("GET /interfaces/{id}/flow-diagram",     h.getInterfaceFlowDiagram)
+	mux.HandleFunc("PUT /interfaces/{id}/flow-diagram",     h.putInterfaceFlowDiagram)
+	mux.HandleFunc("GET /logical-groups/{id}/flow-diagram", h.getGroupFlowDiagram)
+	mux.HandleFunc("PUT /logical-groups/{id}/flow-diagram", h.putGroupFlowDiagram)
+
 	// Architecture diagram
 	mux.HandleFunc("GET /diagram", h.getDiagram)
 

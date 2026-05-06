@@ -11,6 +11,7 @@ import ProjectAdapterTemplates from '../../tools/ProjectAdapterTemplates'
 import ArchitectureView from '../registry/ArchitectureView'
 import RegistryGrid from '../registry/RegistryGrid'
 import SystemView from '../registry/SystemView'
+import FlowDiagram from '../registry/FlowDiagram'
 
 interface ProjectForm { name: string; description: string }
 const emptyForm = (): ProjectForm => ({ name: '', description: '' })
@@ -233,12 +234,7 @@ export default function DesignPhase() {
               }}
             />
           )}
-          {id === 'flow' && (
-            <PhasePlaceholder
-              title="Flow Diagram"
-              description="Per logical group or standalone interface — shows the delivery/support flow with sender, middleware, receiver, firewalls, and numbered steps. Coming next."
-            />
-          )}
+          {id === 'flow' && <FlowDiagram />}
           {id === 'registry' && (
             <RegistryGrid
               key={`${registryFilter.sender ?? ''}-${registryFilter.receiver ?? ''}`}
