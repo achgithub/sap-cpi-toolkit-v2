@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@dagrejs/dagre": "^1.1.4",
+    "elkjs": "^0.9.3",
     "@monaco-editor/react": "^4.6.0",
     "@ui5/webcomponents": "^2.6.0",
     "@ui5/webcomponents-fiori": "^2.6.0",

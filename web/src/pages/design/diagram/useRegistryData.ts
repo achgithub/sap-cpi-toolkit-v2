@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
-import type { IFSystem, IFInterface, RegistryConfig, SystemTypeConfig, InfraTypeConfig, PlatformConfig } from './types'
+import type { IFSystem, IFInterface, RegistryConfig, SystemTypeConfig, InfraTypeConfig, PlatformConfig, InterfaceDependency, CanvasElement } from './types'
+import type { DiagramFilter } from './DiagramFilters'
 
 const BASE = '/api/interfaces'
 
@@ -15,6 +16,16 @@ export function useRegistryData(projectId: string) {
   const [config,     setConfig]     = useState<RegistryConfig>(DEFAULT_CONFIG)
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState('')
+
+  const loadDiagram = useCallback(async (filter: DiagramFilter): Promise<{ systems: IFSystem[], interfaces: IFInterface[] }> => {
+    const params = new URLSearchParams()
+    if (filter.systems.length)    params.set('systems',     filter.systems.join(','))
+    if (filter.statuses.length)   params.set('statuses',    filter.statuses.join(','))
+    if (filter.infraTypes.length) params.set('infra_types', filter.infraTypes.join(','))
+    const res = await fetch(`${BASE}/projects/${projectId}/diagram?${params}`)
+    if (!res.ok) throw new Error('Failed to load diagram')
+    return res.json() as Promise<{ systems: IFSystem[], interfaces: IFInterface[] }>
+  }, [projectId])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -134,11 +145,59 @@ export function useRegistryData(projectId: string) {
     await load()
   }
 
+  // Dependencies
+  async function listDependencies(ifaceId: string): Promise<InterfaceDependency[]> {
+    const res = await fetch(`${BASE}/projects/${projectId}/interfaces/${ifaceId}/dependencies`)
+    if (!res.ok) throw new Error('Failed to load dependencies')
+    return res.json() as Promise<InterfaceDependency[]>
+  }
+
+  async function addDependency(ifaceId: string, body: { depends_on_id: string; kind: string; note: string }): Promise<InterfaceDependency> {
+    const res = await fetch(`${BASE}/projects/${projectId}/interfaces/${ifaceId}/dependencies`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    })
+    if (!res.ok) throw new Error((await res.json() as { error: string }).error)
+    return res.json() as Promise<InterfaceDependency>
+  }
+
+  async function deleteDependency(ifaceId: string, did: string): Promise<void> {
+    await fetch(`${BASE}/projects/${projectId}/interfaces/${ifaceId}/dependencies/${did}`, { method: 'DELETE' })
+  }
+
+  // Canvas elements
+  async function listCanvasElements(ifaceId: string): Promise<CanvasElement[]> {
+    const res = await fetch(`${BASE}/projects/${projectId}/interfaces/${ifaceId}/canvas`)
+    if (!res.ok) throw new Error('Failed to load canvas elements')
+    return res.json() as Promise<CanvasElement[]>
+  }
+
+  async function addCanvasElement(ifaceId: string, body: Partial<CanvasElement>): Promise<CanvasElement> {
+    const res = await fetch(`${BASE}/projects/${projectId}/interfaces/${ifaceId}/canvas`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    })
+    if (!res.ok) throw new Error((await res.json() as { error: string }).error)
+    return res.json() as Promise<CanvasElement>
+  }
+
+  async function updateCanvasElement(ifaceId: string, eid: string, body: Partial<CanvasElement>): Promise<CanvasElement> {
+    const res = await fetch(`${BASE}/projects/${projectId}/interfaces/${ifaceId}/canvas/${eid}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    })
+    if (!res.ok) throw new Error((await res.json() as { error: string }).error)
+    return res.json() as Promise<CanvasElement>
+  }
+
+  async function deleteCanvasElement(ifaceId: string, eid: string): Promise<void> {
+    await fetch(`${BASE}/projects/${projectId}/interfaces/${ifaceId}/canvas/${eid}`, { method: 'DELETE' })
+  }
+
   return {
     systems, interfaces, config, loading, error,
-    load, loadConfig, saveConfig,
+    load, loadConfig, loadDiagram, saveConfig,
     createSystem, updateSystem, deleteSystem, updateSystemPos,
     createInterface, updateInterface, deleteInterface,
     addReceiver, updateReceiver, deleteReceiver,
+    listDependencies, addDependency, deleteDependency,
+    listCanvasElements, addCanvasElement, updateCanvasElement, deleteCanvasElement,
   }
 }

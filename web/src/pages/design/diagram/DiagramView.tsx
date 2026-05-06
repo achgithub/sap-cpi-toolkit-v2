@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useWorkspace } from '../../../context/WorkspaceContext'
 import { useRegistryData } from './useRegistryData'
 import DiagramCanvas from './DiagramCanvas'
@@ -27,9 +27,12 @@ export default function DiagramView() {
 
 function DiagramInner({ projectId }: { projectId: string }) {
   const data = useRegistryData(projectId)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [filter,     setFilter]     = useState<DiagramFilter>(emptyFilter)
+  const [selectedId,         setSelectedId]         = useState<string | null>(null)
+  const [filter,             setFilter]             = useState<DiagramFilter>(emptyFilter)
+  const [diagramSystems,     setDiagramSystems]     = useState(data.systems)
+  const [diagramInterfaces,  setDiagramInterfaces]  = useState(data.interfaces)
 
+  // Load config + full data (for registry panel) on project change
   useEffect(() => {
     data.loadConfig()
     data.load()
@@ -38,65 +41,13 @@ function DiagramInner({ projectId }: { projectId: string }) {
   // Reset filter when project changes
   useEffect(() => { setFilter(emptyFilter()) }, [projectId])
 
-  // ── Apply filters ───────────────────────────────────────────────────────────
-  const { filteredSystems, filteredInterfaces } = useMemo(() => {
-    let ifaces = data.interfaces
-
-    // Status filter applies to interfaces directly
-    if (filter.statuses.length)
-      ifaces = ifaces.filter(i => filter.statuses.includes(i.status))
-
-    // Build infra pool once — used for both interface filtering and visible systems
-    const infraPool = filter.infraTypes.length
-      ? new Set(data.systems.filter(s => filter.infraTypes.includes(s.infra_type)).map(s => s.id))
-      : null
-
-    // Infra filter: both sender and at least one receiver must be in the pool.
-    // "AWS" → only AWS↔AWS. "On-Prem+AWS" → any combination of those two.
-    if (infraPool) {
-      ifaces = ifaces.filter(iface => {
-        const senderIn   = !!iface.sender_system_id && infraPool.has(iface.sender_system_id)
-        const receiverIn = iface.receivers.some(r => !!r.system_id && infraPool.has(r.system_id))
-        return senderIn && receiverIn
-      })
-    }
-
-    // System filter: strict — only interfaces where BOTH sender AND at least one
-    // receiver are within the selected set.
-    if (filter.systems.length) {
-      ifaces = ifaces.filter(iface => {
-        const senderIn   = !!iface.sender_system_id && filter.systems.includes(iface.sender_system_id)
-        const receiverIn = iface.receivers.some(r => !!r.system_id && filter.systems.includes(r.system_id))
-        return senderIn && receiverIn
-      })
-    }
-
-    // Visible systems
-    let systems = data.systems
-    if (filter.systems.length) {
-      // Exact selection
-      systems = data.systems.filter(s => filter.systems.includes(s.id))
-    } else if (infraPool) {
-      // Infra filter: only systems inside the pool that participate in filtered interfaces.
-      // Do NOT include non-pool systems even if they appear as receivers in broadcast interfaces.
-      const usedIds = new Set<string>()
-      ifaces.forEach(iface => {
-        if (iface.sender_system_id) usedIds.add(iface.sender_system_id)
-        iface.receivers.forEach(r => { if (r.system_id) usedIds.add(r.system_id) })
-      })
-      systems = data.systems.filter(s => infraPool.has(s.id) && usedIds.has(s.id))
-    } else if (filter.statuses.length) {
-      // Status filter only: hide systems with no remaining interfaces
-      const usedIds = new Set<string>()
-      ifaces.forEach(iface => {
-        if (iface.sender_system_id) usedIds.add(iface.sender_system_id)
-        iface.receivers.forEach(r => { if (r.system_id) usedIds.add(r.system_id) })
-      })
-      systems = data.systems.filter(s => usedIds.has(s.id))
-    }
-
-    return { filteredSystems: systems, filteredInterfaces: ifaces }
-  }, [data.systems, data.interfaces, filter])
+  // Re-fetch filtered diagram data from the server whenever filter or project changes.
+  // All set logic lives in SQL — no client-side filtering.
+  useEffect(() => {
+    data.loadDiagram(filter)
+      .then(r => { setDiagramSystems(r.systems); setDiagramInterfaces(r.interfaces) })
+      .catch(() => {/* error already visible via data.error */})
+  }, [projectId, filter])
 
   const selectedIface = selectedId ? data.interfaces.find(i => i.id === selectedId) ?? null : null
   const detailWidth   = selectedIface ? 360 : 0
@@ -136,8 +87,8 @@ function DiagramInner({ projectId }: { projectId: string }) {
           )}
           <DiagramCanvas
             projectId={projectId}
-            systems={filteredSystems}
-            interfaces={filteredInterfaces}
+            systems={diagramSystems}
+            interfaces={diagramInterfaces}
             config={data.config}
             selectedIfaceId={selectedId}
             onSelectIface={setSelectedId}
@@ -168,12 +119,16 @@ function DiagramInner({ projectId }: { projectId: string }) {
             key={selectedIface.id}
             iface={selectedIface}
             systems={data.systems}
+            interfaces={data.interfaces}
             config={data.config}
             onUpdate={body => data.updateInterface(selectedIface.id, body)}
             onDelete={async () => { await data.deleteInterface(selectedIface.id); setSelectedId(null) }}
             onAddReceiver={body => data.addReceiver(selectedIface.id, body)}
             onUpdateReceiver={(rid, body) => data.updateReceiver(selectedIface.id, rid, body)}
             onDeleteReceiver={rid => data.deleteReceiver(selectedIface.id, rid)}
+            onListDependencies={() => data.listDependencies(selectedIface.id)}
+            onAddDependency={body => data.addDependency(selectedIface.id, body)}
+            onDeleteDependency={did => data.deleteDependency(selectedIface.id, did)}
             onClose={() => setSelectedId(null)}
           />
         )}

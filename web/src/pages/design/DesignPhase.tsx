@@ -8,6 +8,7 @@ import { useWorkspace, type Project } from '../../context/WorkspaceContext'
 import ProjectSetup from './ProjectSetup'
 import ProjectAdapterTemplates from '../../tools/ProjectAdapterTemplates'
 import DiagramView from './diagram/DiagramView'
+import InterfaceView from './diagram/InterfaceView'
 
 interface ProjectForm { name: string; description: string }
 const emptyForm = (): ProjectForm => ({ name: '', description: '' })
@@ -164,9 +165,10 @@ function ProjectsSection() {
 // ── Design phase shell with sub-nav ──────────────────────────────────────────
 
 const DESIGN_NAV = [
-  { id: 'projects',   label: 'Projects',          icon: 'business-objects-experience' },
-  { id: 'templates',  label: 'Templates',          icon: 'wrench'                      },
-  { id: 'diagram',    label: 'Interface Diagram',  icon: 'org-chart'                   },
+  { id: 'projects',       label: 'Projects',        icon: 'business-objects-experience' },
+  { id: 'templates',      label: 'Templates',        icon: 'wrench'                      },
+  { id: 'diagram',        label: 'Global Diagram',   icon: 'org-chart'                   },
+  { id: 'interface-view', label: 'Interface View',   icon: 'detail-view'                 },
 ]
 
 function PhasePlaceholder({ title, description }: { title: string; description: string }) {
@@ -210,9 +212,10 @@ export default function DesignPhase() {
     <PhaseLayout storageKey="v2-design" items={DESIGN_NAV}>
       {(id) => (
         <>
-          {id === 'projects'  && <ProjectsSection />}
-          {id === 'templates' && <TemplatesSection />}
-          {id === 'diagram'   && <DiagramView />}
+          {id === 'projects'       && <ProjectsSection />}
+          {id === 'templates'      && <TemplatesSection />}
+          {id === 'diagram'        && <DiagramView />}
+          {id === 'interface-view' && <InterfaceView />}
         </>
       )}
     </PhaseLayout>

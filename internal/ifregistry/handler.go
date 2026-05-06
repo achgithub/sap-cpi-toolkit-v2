@@ -37,6 +37,20 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /projects/{pid}/interfaces/{id}/receivers/{rid}",      h.updateReceiver)
 	mux.HandleFunc("DELETE /projects/{pid}/interfaces/{id}/receivers/{rid}",   h.deleteReceiver)
 
+	// Interface dependencies
+	mux.HandleFunc("GET /projects/{pid}/interfaces/{id}/dependencies",         h.listDependencies)
+	mux.HandleFunc("POST /projects/{pid}/interfaces/{id}/dependencies",        h.addDependency)
+	mux.HandleFunc("DELETE /projects/{pid}/interfaces/{id}/dependencies/{did}", h.deleteDependency)
+
+	// Interface canvas elements
+	mux.HandleFunc("GET /projects/{pid}/interfaces/{id}/canvas",          h.listCanvas)
+	mux.HandleFunc("POST /projects/{pid}/interfaces/{id}/canvas",         h.addCanvas)
+	mux.HandleFunc("PUT /projects/{pid}/interfaces/{id}/canvas/{eid}",    h.updateCanvas)
+	mux.HandleFunc("DELETE /projects/{pid}/interfaces/{id}/canvas/{eid}", h.deleteCanvas)
+
+	// Filtered diagram data (systems + interfaces resolved in SQL)
+	mux.HandleFunc("GET /projects/{pid}/diagram", h.getDiagram)
+
 	// Global config (system types, infra types, integration platforms)
 	mux.HandleFunc("GET /config/{key}",  h.getConfig)
 	mux.HandleFunc("PUT /config/{key}",  h.putConfig)

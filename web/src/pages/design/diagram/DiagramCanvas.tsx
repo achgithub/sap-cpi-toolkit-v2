@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import dagre from '@dagrejs/dagre'
+import ELK from 'elkjs/lib/elk.bundled.js'
+import type { ElkNode } from 'elkjs'
 import type { IFSystem, IFInterface, RegistryConfig } from './types'
 import { STATUS_COLORS, getSystemColor } from './types'
 
@@ -29,34 +30,132 @@ const toolBtn: React.CSSProperties = {
 // 8 colours for edge colouring
 const PALETTE = ['#0070F2', '#E53935', '#43A047', '#FB8C00', '#7B1FA2', '#00ACC1', '#F06292', '#795548']
 
-// ── Geometry ──────────────────────────────────────────────────────────────────
+// ── Layout algorithms ─────────────────────────────────────────────────────────
 
-function borderPoint(cx: number, cy: number, tx: number, ty: number, w: number, h: number) {
-  const dx = tx - cx, dy = ty - cy
-  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return { x: cx, y: cy }
-  const sx = dx !== 0 ? (w / 2) / Math.abs(dx) : Infinity
-  const sy = dy !== 0 ? (h / 2) / Math.abs(dy) : Infinity
-  const s  = Math.min(sx, sy)
-  return { x: cx + dx * s, y: cy + dy * s }
+export const LAYOUT_OPTIONS = [
+  { id: 'stress',     label: 'Organic',      hint: 'Balanced spread — best for dense interconnected graphs' },
+  { id: 'layered-lr', label: '→ Left–Right', hint: 'Directed layers left to right — best for clear sender→receiver flows' },
+  { id: 'layered-tb', label: '↓ Top–Down',   hint: 'Directed layers top to bottom' },
+  { id: 'force',      label: 'Force',        hint: 'Force-directed physics — spreads naturally, good for medium graphs' },
+  { id: 'mrtree',     label: 'Tree',         hint: 'Spanning-tree layout — compact hierarchy, good for hub-and-spoke topologies' },
+  { id: 'disco',      label: 'Disco',        hint: 'Disconnected components — lays out each isolated cluster separately, then packs them. Best when filters produce multiple unconnected groups' },
+] as const
+
+export type LayoutAlgo = typeof LAYOUT_OPTIONS[number]['id']
+
+// ── ELK ───────────────────────────────────────────────────────────────────────
+
+const elk = new ELK()
+
+type Point = { x: number; y: number }
+type EdgeSections = Record<string, Point[]>
+
+function elkOptions(algo: LayoutAlgo): Record<string, string> {
+  const base = { 'elk.spacing.nodeNode': '80', 'elk.padding': '[top=60,left=60,bottom=60,right=60]' }
+  switch (algo) {
+    case 'layered-lr':
+      return { ...base, 'elk.algorithm': 'layered', 'elk.direction': 'RIGHT',
+               'elk.layered.spacing.nodeNodeBetweenLayers': '220',
+               'elk.edgeRouting': 'ORTHOGONAL', 'elk.layered.cycleBreaking.strategy': 'GREEDY' }
+    case 'layered-tb':
+      return { ...base, 'elk.algorithm': 'layered', 'elk.direction': 'DOWN',
+               'elk.layered.spacing.nodeNodeBetweenLayers': '180',
+               'elk.edgeRouting': 'ORTHOGONAL', 'elk.layered.cycleBreaking.strategy': 'GREEDY' }
+    case 'force':
+      return { ...base, 'elk.algorithm': 'force', 'elk.force.iterations': '300' }
+    case 'mrtree':
+      return { ...base, 'elk.algorithm': 'mrtree', 'elk.direction': 'RIGHT',
+               'elk.layered.spacing.nodeNodeBetweenLayers': '200' }
+    case 'disco':
+      return { ...base, 'elk.algorithm': 'disco',
+               'elk.disco.componentCompaction.componentLayoutAlgorithm': 'stress',
+               'elk.stress.desiredEdgeLength': '250' }
+    case 'stress':
+    default:
+      return { ...base, 'elk.algorithm': 'stress', 'elk.stress.desiredEdgeLength': '250' }
+  }
 }
+
+async function elkLayout(
+  systems: IFSystem[],
+  pairs: [string, string][],
+  algo: LayoutAlgo,
+): Promise<{ pos: Record<string, Point>; sections: EdgeSections }> {
+  if (systems.length === 0) return { pos: {}, sections: {} }
+
+  const graph: ElkNode = {
+    id: 'root',
+    layoutOptions: elkOptions(algo),
+    children: systems.map(s => ({ id: s.id, width: NODE_W, height: NODE_H })),
+    edges: pairs.map(([a, b]) => ({ id: `${a}__${b}`, sources: [a], targets: [b] })),
+  }
+
+  const result = await elk.layout(graph)
+
+  const pos: Record<string, Point> = {}
+  result.children?.forEach(n => { if (n.x != null && n.y != null) pos[n.id] = { x: n.x, y: n.y } })
+
+  const sections: EdgeSections = {}
+  result.edges?.forEach(e => {
+    const sec = (e as any).sections?.[0]
+    if (!sec) return
+    sections[e.id!] = [sec.startPoint, ...(sec.bendPoints ?? []), sec.endPoint]
+  })
+
+  return { pos, sections }
+}
+
 
 function snap(v: number) { return Math.round(v / SNAP) * SNAP }
 
-// ── Dagre initial layout ──────────────────────────────────────────────────────
+// 4-point orthogonal elbow between two boxes (top-left corners).
+// Used whenever ELK sections aren't valid (initial DB-position load or after manual drag).
+// Routes always leave/enter through a clear gap — never backtracks through the departure box.
+function elbowRoute(pa: Point, pb: Point): Point[] {
+  const acy = pa.y + NODE_H / 2
+  const bcy = pb.y + NODE_H / 2
 
-function dagreLayout(systems: IFSystem[], pairs: [string, string][]) {
-  const g = new dagre.graphlib.Graph()
-  g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: 'LR', ranksep: 220, nodesep: 80, marginx: 60, marginy: 60 })
-  systems.forEach(s => g.setNode(s.id, { width: NODE_W, height: NODE_H }))
-  pairs.forEach(([a, b]) => { if (g.hasNode(a) && g.hasNode(b)) g.setEdge(a, b) })
-  dagre.layout(g)
-  const pos: Record<string, { x: number; y: number }> = {}
-  systems.forEach(s => {
-    const n = g.node(s.id)
-    pos[s.id] = n ? { x: n.x - NODE_W / 2, y: n.y - NODE_H / 2 } : { x: 60, y: 60 }
-  })
-  return pos
+  const rightA = pa.x + NODE_W
+  const rightB = pb.x + NODE_W
+
+  // Determine horizontal relationship
+  const gapLR = pb.x - rightA   // positive = clear gap, pa left of pb
+  const gapRL = pa.x - rightB   // positive = clear gap, pb left of pa
+
+  let start: Point, end: Point, mid1: Point, mid2: Point
+
+  if (gapLR >= 0) {
+    // pa clearly left of pb — exit right of pa, enter left of pb
+    start = { x: rightA, y: acy }
+    end   = { x: pb.x,  y: bcy }
+    const midX = start.x + gapLR / 2
+    mid1 = { x: midX, y: acy }; mid2 = { x: midX, y: bcy }
+  } else if (gapRL >= 0) {
+    // pa clearly right of pb — exit left of pa, enter right of pb
+    start = { x: pa.x,   y: acy }
+    end   = { x: rightB, y: bcy }
+    const midX = end.x + gapRL / 2
+    mid1 = { x: midX, y: acy }; mid2 = { x: midX, y: bcy }
+  } else {
+    // X ranges overlap — route around the outside: exit top/bottom, bend wide
+    const acx = pa.x + NODE_W / 2
+    const bcx = pb.x + NODE_W / 2
+    if (acy <= bcy) {
+      // pa above pb: exit bottom of pa, enter top of pb
+      start = { x: acx, y: pa.y + NODE_H }
+      end   = { x: bcx, y: pb.y }
+      const midY = start.y + (end.y - start.y) / 2
+      mid1 = { x: acx, y: midY }; mid2 = { x: bcx, y: midY }
+    } else {
+      // pa below pb: exit top of pa, enter bottom of pb
+      start = { x: acx, y: pa.y }
+      end   = { x: bcx, y: pb.y + NODE_H }
+      const midY = end.y + (start.y - end.y) / 2
+      mid1 = { x: acx, y: midY }; mid2 = { x: bcx, y: midY }
+    }
+  }
+
+  return [start, mid1, mid2, end]
 }
 
 // ── Label builder ─────────────────────────────────────────────────────────────
@@ -76,12 +175,10 @@ function buildLabels(
     return [{ kind: 'count', text: String(ifaceIds.length), ifaceIds }]
   }
 
-  // Collect ids+refs for interfaces that have a ref set
   const items = ifaceIds
     .map(id => ({ id, ref: ifaceIndex.get(id)?.interface_ref ?? '' }))
     .filter(x => x.ref.length > 0)
 
-  // Fallback to count if no refs set yet
   if (items.length === 0) {
     return [{ kind: 'count', text: String(ifaceIds.length), ifaceIds }]
   }
@@ -92,7 +189,6 @@ function buildLabels(
     return items.map(x => ({ kind: 'ref' as const, text: x.ref, ifaceId: x.id }))
   }
 
-  // Show as many as fit; last slot becomes an overflow "…" label
   const shown  = items.slice(0, maxFit - 1)
   const hidden = items.slice(maxFit - 1)
   return [
@@ -110,17 +206,48 @@ function saveColors(projectId: string, colors: Record<string, string>) {
   localStorage.setItem(`diagram_colors_${projectId}`, JSON.stringify(colors))
 }
 
+// ── Polyline path builder ─────────────────────────────────────────────────────
+
+function pointsAttr(pts: Point[]): string {
+  return pts.map(p => `${p.x},${p.y}`).join(' ')
+}
+
+// Given an ordered list of waypoints, find the midpoint along the total length
+// (used for label placement on multi-segment polylines).
+function midpointAlongPath(pts: Point[], t: number): Point {
+  if (pts.length < 2) return pts[0] ?? { x: 0, y: 0 }
+  const segs: number[] = []
+  let total = 0
+  for (let i = 0; i < pts.length - 1; i++) {
+    const d = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y)
+    segs.push(d)
+    total += d
+  }
+  let target = t * total
+  for (let i = 0; i < segs.length; i++) {
+    if (target <= segs[i]) {
+      const f = target / segs[i]
+      return { x: pts[i].x + f * (pts[i + 1].x - pts[i].x), y: pts[i].y + f * (pts[i + 1].y - pts[i].y) }
+    }
+    target -= segs[i]
+  }
+  return pts[pts.length - 1]
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function DiagramCanvas({ projectId, systems, interfaces, config, selectedIfaceId, onSelectIface, onNodeMoved }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [pan,        setPan]        = useState({ x: 40, y: 40 })
-  const [scale,      setScale]      = useState(1)
-  const [pos,        setPos]        = useState<Record<string, { x: number; y: number }>>({})
-  const [edgeColors, setEdgeColors] = useState<Record<string, string>>(() => loadColors(projectId))
-  const [popup,      setPopup]      = useState<{ sx: number; sy: number; ifaceIds: string[]; key: string } | null>(null)
-  const [clickedKey, setClickedKey] = useState<string | null>(null)
-  const [labelMode,  setLabelMode]  = useState<'count' | 'ref'>('count')
+  const [pan,          setPan]          = useState({ x: 40, y: 40 })
+  const [scale,        setScale]        = useState(1)
+  const [pos,          setPos]          = useState<Record<string, Point>>({})
+  const [edgeSections,  setEdgeSections]  = useState<EdgeSections>({})
+  const [sectionsValid, setSectionsValid] = useState(false)
+  const [layoutAlgo,    setLayoutAlgo]    = useState<LayoutAlgo>('stress')
+  const [edgeColors,   setEdgeColors]   = useState<Record<string, string>>(() => loadColors(projectId))
+  const [popup,        setPopup]        = useState<{ sx: number; sy: number; ifaceIds: string[]; key: string } | null>(null)
+  const [clickedKey,   setClickedKey]   = useState<string | null>(null)
+  const [labelMode,    setLabelMode]    = useState<'count' | 'ref'>('count')
 
   const drag   = useRef<{ id: string; ox: number; oy: number; mx: number; my: number } | null>(null)
   const panRef = useRef<{ mx: number; my: number; px: number; py: number } | null>(null)
@@ -129,9 +256,6 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
   useEffect(() => { setEdgeColors(loadColors(projectId)) }, [projectId])
 
   // Connection pairs (undirected, deduped).
-  // Only draw lines between systems that are actually visible — broadcast
-  // interfaces can have receivers outside the current filter set and those
-  // would draw lines off into empty space.
   const pairs = useMemo(() => {
     const visibleIds = new Set(systems.map(s => s.id))
     const map = new Map<string, string[]>()
@@ -140,7 +264,7 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
       if (!visibleIds.has(iface.sender_system_id)) return
       iface.receivers.forEach(rec => {
         if (!rec.system_id || rec.system_id === iface.sender_system_id) return
-        if (!visibleIds.has(rec.system_id)) return   // receiver off-screen — skip
+        if (!visibleIds.has(rec.system_id)) return
         const key = [iface.sender_system_id!, rec.system_id].sort().join('__')
         if (!map.has(key)) map.set(key, [])
         map.get(key)!.push(iface.id)
@@ -149,34 +273,48 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
     return map
   }, [systems, interfaces])
 
-  // Track project so we know when it changes vs when a filter changes
   const lastProjectId = useRef('')
+  const layoutGen     = useRef(0)
 
-  // Initialise / re-layout positions
-  // - New project load → use DB-saved positions (or Dagre fallback)
-  // - Filter change on same project → always re-run Dagre on visible subset
-  //   so nodes pack tightly together
+  // Layout: ELK stress algorithm. Async with stale-call guard via layoutGen.
+  // - New project load → prefer DB-saved positions; ELK stress layout as fallback for unpositioned nodes.
+  // - Filter change    → full ELK stress re-layout (spreads nodes across canvas).
+  // Stress algorithm does not produce edge sections — elbowRoute handles all edges.
   useEffect(() => {
-    const pairList    = Array.from(pairs.keys()).map(k => k.split('__') as [string, string])
-    const layout      = dagreLayout(systems, pairList)
+    const pairList     = Array.from(pairs.keys()).map(k => k.split('__') as [string, string])
     const isNewProject = lastProjectId.current !== projectId
     lastProjectId.current = projectId
+    const gen = ++layoutGen.current
 
-    setPos(prev => {
-      const next = isNewProject ? {} : { ...prev }
-      systems.forEach(s => {
-        if (isNewProject) {
-          next[s.id] = (s.pos_x !== 0 || s.pos_y !== 0)
-            ? { x: s.pos_x, y: s.pos_y }
-            : (layout[s.id] ?? { x: 60, y: 60 })
-        } else {
-          // Filter changed — use fresh Dagre layout so nodes move close together
-          next[s.id] = layout[s.id] ?? prev[s.id] ?? { x: 60, y: 60 }
-        }
-      })
-      return next
+    elkLayout(systems, pairList, layoutAlgo).then(({ pos: layout, sections }) => {
+      if (gen !== layoutGen.current) return
+
+      setEdgeSections(sections)
+
+      if (isNewProject) {
+        // On project load: prefer DB positions; ELK fills in any unpositioned nodes.
+        setSectionsValid(false) // DB positions won't match ELK sections
+        setPos(() => {
+          const next: Record<string, Point> = {}
+          systems.forEach(s => {
+            next[s.id] = (s.pos_x !== 0 || s.pos_y !== 0)
+              ? { x: s.pos_x, y: s.pos_y }
+              : (layout[s.id] ?? { x: 60, y: 60 })
+          })
+          return next
+        })
+      } else {
+        // Filter or algorithm change: full ELK re-layout.
+        // Layered algorithms produce edge sections; stress/force/radial don't.
+        setSectionsValid(Object.keys(sections).length > 0)
+        setPos(() => {
+          const next: Record<string, Point> = {}
+          systems.forEach(s => { next[s.id] = layout[s.id] ?? { x: 60, y: 60 } })
+          return next
+        })
+      }
     })
-  }, [projectId, systems, pairs])
+  }, [projectId, systems, pairs, layoutAlgo])
 
   const ifaceIndex = useMemo(() => {
     const m = new Map<string, IFInterface>()
@@ -190,7 +328,6 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
     const el = containerRef.current
     if (!el || systems.length === 0) return
     const rect = el.getBoundingClientRect()
-    // Only consider positions of currently-visible systems
     const visiblePos = systems.map(s => pos[s.id]).filter(Boolean)
     if (visiblePos.length === 0) return
     const xs   = visiblePos.map(p => p.x)
@@ -207,11 +344,9 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
     setPan({ x: (rect.width - (maxX - minX) * ns) / 2 - minX * ns, y: (rect.height - (maxY - minY) * ns) / 2 - minY * ns })
   }, [systems, pos])
 
-  // Keep a stable ref so the auto-fit effect always calls the latest version
   const fitViewRef = useRef(fitView)
   useEffect(() => { fitViewRef.current = fitView })
 
-  // Auto-fit whenever the visible system set changes (filter applied / cleared)
   const sysKey = systems.map(s => s.id).sort().join(',')
   useEffect(() => {
     if (!sysKey) return
@@ -235,12 +370,12 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
   useEffect(() => {
     function onMove(e: MouseEvent) {
       if (drag.current) {
-        // Destructure before setPos — the ref may be null by the time
-        // the async updater function runs (stale ref crash).
         const { id, ox, oy, mx, my } = drag.current
         const dx = (e.clientX - mx) / scale
         const dy = (e.clientY - my) / scale
         setPos(prev => ({ ...prev, [id]: { x: ox + dx, y: oy + dy } }))
+        // Node was dragged manually — sections no longer match layout
+        setSectionsValid(false)
       }
       if (panRef.current) {
         const { px, py, mx, my } = panRef.current
@@ -250,7 +385,7 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
     function onUp(e: MouseEvent) {
       if (drag.current) {
         const { id, ox, oy, mx, my } = drag.current
-        drag.current = null  // clear before setPos to avoid any re-entrant access
+        drag.current = null
         const nx = snap(ox + (e.clientX - mx) / scale)
         const ny = snap(oy + (e.clientY - my) / scale)
         setPos(prev => ({ ...prev, [id]: { x: nx, y: ny } }))
@@ -293,7 +428,6 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
     panRef.current = { mx: e.clientX, my: e.clientY, px: pan.x, py: pan.y }
   }, [pan])
 
-  // Convert a canvas-space point to screen coords for popup positioning
   const canvasToScreen = useCallback((cx: number, cy: number) => {
     const rect = containerRef.current?.getBoundingClientRect()
     return {
@@ -331,8 +465,11 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
       onMouseDown={onBgMouseDown}
       style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: 'var(--sapBackgroundColor)', cursor: 'grab' }}
     >
-      {/* Toolbar */}
-      <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 10, display: 'flex', gap: 6 }}>
+      {/* Toolbar — stop propagation so clicks here don't trigger canvas pan */}
+      <div
+        onMouseDown={e => e.stopPropagation()}
+        style={{ position: 'absolute', top: 10, left: 10, zIndex: 10, display: 'flex', gap: 6, alignItems: 'center', cursor: 'default' }}
+      >
         <button onClick={fitView} title="Fit all boxes into view" style={toolBtn}>⤢ Fit</button>
         <button
           onClick={() => setLabelMode(m => m === 'count' ? 'ref' : 'count')}
@@ -341,6 +478,16 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
         >
           {labelMode === 'count' ? '⊞ Refs' : '# Count'}
         </button>
+        <select
+          value={layoutAlgo}
+          onChange={e => setLayoutAlgo(e.target.value as LayoutAlgo)}
+          title="Layout algorithm — changing this re-runs the layout"
+          style={{ ...toolBtn, padding: '3px 6px', appearance: 'auto' }}
+        >
+          {LAYOUT_OPTIONS.map(o => (
+            <option key={o.id} value={o.id} title={o.hint}>{o.label}</option>
+          ))}
+        </select>
       </div>
 
       {/* Transform wrapper */}
@@ -351,33 +498,35 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
             const [aid, bid] = key.split('__')
             const pa = pos[aid], pb = pos[bid]
             if (!pa || !pb) return null
-            const acx = pa.x + NODE_W / 2, acy = pa.y + NODE_H / 2
-            const bcx = pb.x + NODE_W / 2, bcy = pb.y + NODE_H / 2
-            const src = borderPoint(acx, acy, bcx, bcy, NODE_W, NODE_H)
-            const tgt = borderPoint(bcx, bcy, acx, acy, NODE_W, NODE_H)
+
             const highlighted = key === clickedKey
             const color  = edgeColors[key] ?? '#555'
             const stroke = highlighted ? 'var(--sapHighlightColor)' : color
             const sw     = highlighted ? 2.5 : 2
-            const lineLen = Math.hypot(tgt.x - src.x, tgt.y - src.y)
 
-            // Build labels for this line
-            const labels = buildLabels(ifaceIds, ifaceIndex, labelMode, lineLen)
+            // ELK orthogonal sections when valid; elbow route otherwise (never straight lines).
+            const elkPts   = sectionsValid ? edgeSections[key] : undefined
+            const waypoints = (elkPts && elkPts.length >= 2) ? elkPts : elbowRoute(pa, pb)
+
+            const totalLen = waypoints.reduce((acc, p, i) =>
+              i === 0 ? acc : acc + Math.hypot(p.x - waypoints[i - 1].x, p.y - waypoints[i - 1].y), 0)
+
+            const labels = buildLabels(ifaceIds, ifaceIndex, labelMode, totalLen)
+            const pts    = pointsAttr(waypoints)
 
             return (
               <g key={key}>
                 {/* Wide transparent hit area */}
-                <line x1={src.x} y1={src.y} x2={tgt.x} y2={tgt.y}
-                  stroke="transparent" strokeWidth={16} style={{ cursor: 'pointer' }}
+                <polyline points={pts}
+                  stroke="transparent" strokeWidth={16} fill="none" style={{ cursor: 'pointer' }}
                   onClick={e => onLineClick(e as unknown as React.MouseEvent, key, ifaceIds)} />
                 {/* Visible line */}
-                <line x1={src.x} y1={src.y} x2={tgt.x} y2={tgt.y}
-                  stroke={stroke} strokeWidth={sw} style={{ pointerEvents: 'none' }} />
-                {/* Labels distributed along the line */}
+                <polyline points={pts}
+                  stroke={stroke} strokeWidth={sw} fill="none" style={{ pointerEvents: 'none' }} />
+                {/* Labels distributed along path */}
                 {labels.map((label, li) => {
                   const t  = (li + 1) / (labels.length + 1)
-                  const lx = src.x + t * (tgt.x - src.x)
-                  const ly = src.y + t * (tgt.y - src.y)
+                  const lp = midpointAlongPath(waypoints, t)
                   const tw = label.text.length * 5.5 + 12
 
                   const isClickable = label.kind === 'ref' || label.kind === 'more'
@@ -386,7 +535,7 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
                   function handleLabelClick(e: React.MouseEvent) {
                     e.stopPropagation()
                     if (label.kind === 'ref')  onRefClick(e, label.ifaceId)
-                    if (label.kind === 'more') onMoreClick(e, key, label.hiddenIds, lx, ly)
+                    if (label.kind === 'more') onMoreClick(e, key, label.hiddenIds, lp.x, lp.y)
                   }
 
                   return (
@@ -394,9 +543,9 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
                       style={{ cursor: isClickable ? 'pointer' : 'default', pointerEvents: isClickable ? 'auto' : 'none' }}
                       onClick={isClickable ? handleLabelClick : undefined}
                     >
-                      <rect x={lx - tw / 2} y={ly - 9} width={tw} height={18} rx={4}
+                      <rect x={lp.x - tw / 2} y={lp.y - 9} width={tw} height={18} rx={4}
                         fill="var(--sapTile_Background)" stroke={stroke} strokeWidth={1} />
-                      <text x={lx} y={ly + 5} textAnchor="middle"
+                      <text x={lp.x} y={lp.y + 5} textAnchor="middle"
                         fontSize={11} fontFamily="var(--sapFontFamily)"
                         fill={fill} fontWeight={600}>
                         {label.text}
@@ -481,8 +630,10 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
               >
                 <span style={{ width: '7px', height: '7px', borderRadius: '50%', flexShrink: 0, background: STATUS_COLORS[iface.status] ?? '#888' }} />
                 <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapTextColor)', flex: 1 }}>{iface.name}</span>
-                {iface.integration_platform && (
-                  <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.68rem', color: 'var(--sapContent_LabelColor)', flexShrink: 0 }}>{iface.integration_platform}</span>
+                {(iface.middleware_chain?.length > 0 || iface.integration_platform) && (
+                  <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.68rem', color: 'var(--sapContent_LabelColor)', flexShrink: 0 }}>
+                    {iface.middleware_chain?.length > 0 ? iface.middleware_chain[0].platform : iface.integration_platform}
+                  </span>
                 )}
               </div>
             )
@@ -492,7 +643,6 @@ export default function DiagramCanvas({ projectId, systems, interfaces, config, 
           <div style={{ padding: '8px 12px', borderTop: '1px solid var(--sapList_BorderColor)', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)', flexShrink: 0 }}>Line colour</span>
             <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-              {/* Reset to default */}
               <button
                 onClick={() => applyColor(popup.key, '')}
                 title="Reset to default"

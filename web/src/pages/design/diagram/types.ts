@@ -21,6 +21,38 @@ export interface IFReceiver {
   meta: Record<string, string>
 }
 
+export interface MiddlewareNode {
+  platform:  string
+  label:     string
+  transport: string
+  note:      string
+}
+
+export interface InterfaceDependency {
+  id:              string
+  interface_id:    string
+  depends_on_id:   string
+  kind:            'chains_to' | 'triggers' | 'shares_data'
+  note:            string
+  depends_on_ref:  string
+  depends_on_name: string
+}
+
+export interface CanvasElement {
+  id:           string
+  interface_id: string
+  kind:         'system_node' | 'middleware_node' | 'text' | 'firewall' | 'step' | 'boundary'
+  system_id:    string | null
+  label:        string
+  body:         string
+  pos_x:        number
+  pos_y:        number
+  width:        number
+  height:       number
+  color:        string
+  sort_order:   number
+}
+
 export interface IFInterface {
   id: string
   project_id: string
@@ -43,6 +75,7 @@ export interface IFInterface {
   debug_trigger_path: string
   debug_trigger_payload: string
   meta: Record<string, string>
+  middleware_chain: MiddlewareNode[]
   receivers: IFReceiver[]
 }
 

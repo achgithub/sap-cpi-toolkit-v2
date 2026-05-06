@@ -1,18 +1,22 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Input, Label, Select, Option, MessageStrip } from '@ui5/webcomponents-react'
-import type { IFInterface, IFSystem, IFReceiver, RegistryConfig } from './types'
+import type { IFInterface, IFSystem, IFReceiver, RegistryConfig, MiddlewareNode, InterfaceDependency } from './types'
 import { INTERFACE_TYPES, STATUSES, TRANSPORTS, AUTH_TYPES, STATUS_COLORS, TYPE_LABELS } from './types'
 
 interface Props {
-  iface: IFInterface
-  systems: IFSystem[]
-  config: RegistryConfig
-  onUpdate: (body: Partial<IFInterface>) => Promise<void>
-  onDelete: () => Promise<void>
-  onAddReceiver: (body: object) => Promise<void>
-  onUpdateReceiver: (rid: string, body: object) => Promise<void>
-  onDeleteReceiver: (rid: string) => Promise<void>
-  onClose: () => void
+  iface:                IFInterface
+  systems:              IFSystem[]
+  interfaces:           IFInterface[]
+  config:               RegistryConfig
+  onUpdate:             (body: Partial<IFInterface>) => Promise<void>
+  onDelete:             () => Promise<void>
+  onAddReceiver:        (body: object) => Promise<void>
+  onUpdateReceiver:     (rid: string, body: object) => Promise<void>
+  onDeleteReceiver:     (rid: string) => Promise<void>
+  onListDependencies:   () => Promise<InterfaceDependency[]>
+  onAddDependency:      (body: { depends_on_id: string; kind: string; note: string }) => Promise<InterfaceDependency>
+  onDeleteDependency:   (did: string) => Promise<void>
+  onClose:              () => void
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -52,13 +56,177 @@ function MetaEditor({ meta, onChange }: { meta: Record<string, string>; onChange
   )
 }
 
+const KIND_COLORS = { chains_to: '#0070F2', triggers: '#FB8C00', shares_data: '#78909C' }
+const KIND_LABELS = { chains_to: 'chains to', triggers: 'triggers', shares_data: 'shares data' }
+
+function DependenciesSection({
+  iface, interfaces,
+  onList, onAdd, onDelete,
+}: {
+  iface:      IFInterface
+  interfaces: IFInterface[]
+  onList:     () => Promise<InterfaceDependency[]>
+  onAdd:      (body: { depends_on_id: string; kind: string; note: string }) => Promise<InterfaceDependency>
+  onDelete:   (did: string) => Promise<void>
+}) {
+  const [deps,       setDeps]       = useState<InterfaceDependency[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [addTarget,  setAddTarget]  = useState('')
+  const [addKind,    setAddKind]    = useState('chains_to')
+  const [addNote,    setAddNote]    = useState('')
+  const [saving,     setSaving]     = useState(false)
+
+  useEffect(() => {
+    onList().then(setDeps).catch(() => setDeps([])).finally(() => setLoading(false))
+  }, [iface.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const otherIfaces = interfaces.filter(i => i.id !== iface.id)
+
+  async function handleAdd() {
+    if (!addTarget) return
+    setSaving(true)
+    try {
+      const dep = await onAdd({ depends_on_id: addTarget, kind: addKind, note: addNote })
+      setDeps(prev => [...prev, dep])
+      setAddTarget(''); setAddNote('')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(did: string) {
+    await onDelete(did)
+    setDeps(prev => prev.filter(d => d.id !== did))
+  }
+
+  return (
+    <div>
+      <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--sapTextColor)', marginBottom: '6px' }}>
+        Dependencies ({loading ? '…' : deps.length})
+      </div>
+
+      {deps.length > 0 && (
+        <div style={{ border: '1px solid var(--sapList_BorderColor)', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
+          {deps.map(dep => (
+            <div key={dep.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 10px', borderBottom: '1px solid var(--sapList_BorderColor)', fontFamily: 'var(--sapFontFamily)', fontSize: '0.78rem', color: 'var(--sapTextColor)' }}>
+              {dep.depends_on_ref && (
+                <code style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--sapContent_LabelColor)', flexShrink: 0 }}>{dep.depends_on_ref}</code>
+              )}
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dep.depends_on_name}</span>
+              <span style={{ padding: '1px 6px', borderRadius: '8px', fontSize: '0.68rem', background: KIND_COLORS[dep.kind as keyof typeof KIND_COLORS] ?? '#78909C', color: '#fff', flexShrink: 0 }}>
+                {KIND_LABELS[dep.kind as keyof typeof KIND_LABELS] ?? dep.kind}
+              </span>
+              {dep.note && <span style={{ color: 'var(--sapContent_LabelColor)', fontSize: '0.72rem', flexShrink: 0 }}>{dep.note}</span>}
+              <Button design="Transparent" icon="delete" onClick={() => handleDelete(dep.id)} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add form */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <Select
+            value={addTarget}
+            onChange={e => setAddTarget((e.target as unknown as HTMLSelectElement).value)}
+            style={{ flex: 1 }}
+          >
+            <Option value="">— select interface —</Option>
+            {otherIfaces.map(i => (
+              <Option key={i.id} value={i.id}>{i.interface_ref ? `${i.interface_ref} · ` : ''}{i.name}</Option>
+            ))}
+          </Select>
+          <Select
+            value={addKind}
+            onChange={e => setAddKind((e.target as unknown as HTMLSelectElement).value)}
+            style={{ flex: '0 0 110px' }}
+          >
+            <Option value="chains_to">chains to</Option>
+            <Option value="triggers">triggers</Option>
+            <Option value="shares_data">shares data</Option>
+          </Select>
+        </div>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <Input
+            placeholder="note (optional)"
+            value={addNote}
+            onInput={e => setAddNote((e.target as unknown as HTMLInputElement).value)}
+            style={{ flex: 1 }}
+          />
+          <Button design="Emphasized" onClick={handleAdd} disabled={!addTarget || saving}>
+            {saving ? '…' : 'Add'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MiddlewareChainEditor({
+  chain, platforms, onChange,
+}: {
+  chain:     MiddlewareNode[]
+  platforms: Array<{ name: string }>
+  onChange:  (chain: MiddlewareNode[]) => void
+}) {
+  function update(i: number, patch: Partial<MiddlewareNode>) {
+    const next = chain.map((n, idx) => idx === i ? { ...n, ...patch } : n)
+    onChange(next)
+  }
+  function remove(i: number) { onChange(chain.filter((_, idx) => idx !== i)) }
+  function move(i: number, dir: -1 | 1) {
+    const next = [...chain]
+    const j = i + dir
+    if (j < 0 || j >= next.length) return
+    ;[next[i], next[j]] = [next[j], next[i]]
+    onChange(next)
+  }
+  function addHop() {
+    onChange([...chain, { platform: '', label: '', transport: '', note: '' }])
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      {chain.map((node, i) => (
+        <div key={i} style={{ display: 'flex', gap: '4px', alignItems: 'flex-start', padding: '6px 8px', border: '1px solid var(--sapList_BorderColor)', borderRadius: '4px', background: 'var(--sapGroup_ContentBackground)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
+            <Button design="Transparent" icon="navigation-up-arrow" onClick={() => move(i, -1)} disabled={i === 0} />
+            <Button design="Transparent" icon="navigation-down-arrow" onClick={() => move(i, 1)} disabled={i === chain.length - 1} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', flex: 1 }}>
+            <Field label="Platform">
+              <Select value={node.platform} onChange={e => update(i, { platform: (e.target as unknown as HTMLSelectElement).value })}>
+                <Option value="">— select —</Option>
+                {platforms.map(p => <Option key={p.name} value={p.name}>{p.name}</Option>)}
+              </Select>
+            </Field>
+            <Field label="Label">
+              <Input value={node.label} onInput={e => update(i, { label: (e.target as unknown as HTMLInputElement).value })} />
+            </Field>
+            <Field label="Transport">
+              <Select value={node.transport} onChange={e => update(i, { transport: (e.target as unknown as HTMLSelectElement).value })}>
+                {TRANSPORTS.map(t => <Option key={t} value={t}>{t || '—'}</Option>)}
+              </Select>
+            </Field>
+            <Field label="Note">
+              <Input value={node.note} onInput={e => update(i, { note: (e.target as unknown as HTMLInputElement).value })} />
+            </Field>
+          </div>
+          <Button design="Transparent" icon="delete" onClick={() => remove(i)} />
+        </div>
+      ))}
+      <Button design="Transparent" icon="add" onClick={addHop}>Add hop</Button>
+    </div>
+  )
+}
+
 function ReceiverRow({ rec, systems, onUpdate, onDelete }: {
   rec: IFReceiver; systems: IFSystem[]
   onUpdate: (body: object) => Promise<void>; onDelete: () => Promise<void>
 }) {
   const [editing, setEditing] = useState(false)
-  const [form, setForm] = useState({ ...rec })
-  const [saving, setSaving] = useState(false)
+  const [form,    setForm]    = useState({ ...rec })
+  const [saving,  setSaving]  = useState(false)
   const systemName = systems.find(s => s.id === rec.system_id)?.name ?? '—'
 
   if (!editing) {
@@ -113,11 +281,16 @@ function ReceiverRow({ rec, systems, onUpdate, onDelete }: {
   )
 }
 
-export default function InterfaceDetail({ iface, systems, config, onUpdate, onDelete, onAddReceiver, onUpdateReceiver, onDeleteReceiver, onClose }: Props) {
+export default function InterfaceDetail({
+  iface, systems, interfaces, config,
+  onUpdate, onDelete, onAddReceiver, onUpdateReceiver, onDeleteReceiver,
+  onListDependencies, onAddDependency, onDeleteDependency,
+  onClose,
+}: Props) {
   const [editing, setEditing] = useState(false)
-  const [form, setForm] = useState<Partial<IFInterface>>({ ...iface })
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+  const [form,    setForm]    = useState<Partial<IFInterface>>({ ...iface })
+  const [saving,  setSaving]  = useState(false)
+  const [error,   setError]   = useState('')
 
   async function save() {
     setSaving(true); setError('')
@@ -149,7 +322,7 @@ export default function InterfaceDetail({ iface, systems, config, onUpdate, onDe
               <Field label="Name">
                 <Input value={form.name ?? ''} onInput={e => setForm(f => ({ ...f, name: (e.target as unknown as HTMLInputElement).value }))} style={{ width: '100%' }} />
               </Field>
-              <Field label="Ref (10 chars) *">
+              <Field label="Ref (10 chars)">
                 <Input
                   value={form.interface_ref ?? ''}
                   onInput={e => {
@@ -180,18 +353,22 @@ export default function InterfaceDetail({ iface, systems, config, onUpdate, onDe
                   {systems.map(s => <Option key={s.id} value={s.id}>{s.name}</Option>)}
                 </Select>
               </Field>
-              <Field label="Integration Platform">
-                <Select value={form.integration_platform ?? ''} onChange={e => setForm(f => ({ ...f, integration_platform: (e.target as unknown as HTMLSelectElement).value }))}>
-                  <Option value="">— unknown —</Option>
-                  {config.platforms.map(p => <Option key={p.name} value={p.name}>{p.name}</Option>)}
-                </Select>
-              </Field>
               <Field label="CPI Package">
                 <Input value={form.cpi_package_id ?? ''} onInput={e => setForm(f => ({ ...f, cpi_package_id: (e.target as unknown as HTMLInputElement).value }))} />
               </Field>
               <Field label="CPI iFlow">
                 <Input value={form.cpi_iflow_id ?? ''} onInput={e => setForm(f => ({ ...f, cpi_iflow_id: (e.target as unknown as HTMLInputElement).value }))} />
               </Field>
+            </div>
+
+            {/* Middleware chain */}
+            <div>
+              <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem', color: 'var(--sapContent_LabelColor)', marginBottom: '4px' }}>Middleware Chain</div>
+              <MiddlewareChainEditor
+                chain={form.middleware_chain ?? []}
+                platforms={config.platforms}
+                onChange={chain => setForm(f => ({ ...f, middleware_chain: chain }))}
+              />
             </div>
 
             {/* P2P connection config */}
@@ -231,7 +408,17 @@ export default function InterfaceDetail({ iface, systems, config, onUpdate, onDe
             {iface.interface_ref && <InfoRow label="Ref"><code style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{iface.interface_ref}</code></InfoRow>}
             {iface.description && <p style={{ margin: 0, color: 'var(--sapContent_LabelColor)' }}>{iface.description}</p>}
             <InfoRow label="Sender">{senderName}</InfoRow>
-            {iface.integration_platform && <InfoRow label="Platform">{iface.integration_platform}</InfoRow>}
+            {/* Middleware chain (preferred) or legacy integration_platform */}
+            {iface.middleware_chain?.length > 0
+              ? iface.middleware_chain.map((node, i) => (
+                  <InfoRow key={i} label={i === 0 ? 'Middleware' : ''}>
+                    {[node.platform, node.label, node.transport].filter(Boolean).join(' · ')}
+                  </InfoRow>
+                ))
+              : iface.integration_platform
+                ? <InfoRow label="Platform">{iface.integration_platform}</InfoRow>
+                : null
+            }
             {iface.cpi_package_id && <InfoRow label="Package">{iface.cpi_package_id}</InfoRow>}
             {iface.cpi_iflow_id   && <InfoRow label="iFlow">{iface.cpi_iflow_id}</InfoRow>}
             {iface.interface_type !== 'broadcast' && (
@@ -265,6 +452,15 @@ export default function InterfaceDetail({ iface, systems, config, onUpdate, onDe
             }
           </div>
         </div>
+
+        {/* Dependencies */}
+        <DependenciesSection
+          iface={iface}
+          interfaces={interfaces}
+          onList={onListDependencies}
+          onAdd={onAddDependency}
+          onDelete={onDeleteDependency}
+        />
       </div>
     </div>
   )

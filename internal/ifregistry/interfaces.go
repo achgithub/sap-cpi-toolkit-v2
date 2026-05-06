@@ -6,50 +6,58 @@ import (
 	"time"
 )
 
+type MiddlewareNode struct {
+	Platform  string `json:"platform"`
+	Label     string `json:"label"`
+	Transport string `json:"transport"`
+	Note      string `json:"note"`
+}
+
 type Receiver struct {
+	ID              string            `json:"id"`
+	InterfaceID     string            `json:"interface_id"`
+	SystemID        *string           `json:"system_id"`
+	CpiIflowID      string            `json:"cpi_iflow_id"`
+	Transport       string            `json:"transport"`
+	AuthType        string            `json:"auth_type"`
+	CredentialAlias string            `json:"credential_alias"`
+	Meta            map[string]string `json:"meta"`
+	CreatedAt       time.Time         `json:"created_at"`
+}
+
+type Interface struct {
 	ID                  string            `json:"id"`
-	InterfaceID         string            `json:"interface_id"`
-	SystemID            *string           `json:"system_id"`
+	ProjectID           string            `json:"project_id"`
+	Name                string            `json:"name"`
+	Description         string            `json:"description"`
+	InterfaceType       string            `json:"interface_type"`
+	Status              string            `json:"status"`
+	SenderSystemID      *string           `json:"sender_system_id"`
+	InterfaceRef        string            `json:"interface_ref"`
+	IntegrationPlatform string            `json:"integration_platform"`
+	CpiPackageID        string            `json:"cpi_package_id"`
 	CpiIflowID          string            `json:"cpi_iflow_id"`
 	Transport           string            `json:"transport"`
 	AuthType            string            `json:"auth_type"`
 	CredentialAlias     string            `json:"credential_alias"`
+	EdgeStyle           string            `json:"edge_style"`
+	EdgeRouting         string            `json:"edge_routing"`
+	DebugTriggerEnabled bool              `json:"debug_trigger_enabled"`
+	DebugTriggerMethod  string            `json:"debug_trigger_method"`
+	DebugTriggerPath    string            `json:"debug_trigger_path"`
+	DebugTriggerPayload string            `json:"debug_trigger_payload"`
 	Meta                map[string]string `json:"meta"`
+	MiddlewareChain     []MiddlewareNode  `json:"middleware_chain"`
+	Receivers           []Receiver        `json:"receivers"`
 	CreatedAt           time.Time         `json:"created_at"`
-}
-
-type Interface struct {
-	ID                   string            `json:"id"`
-	ProjectID            string            `json:"project_id"`
-	Name                 string            `json:"name"`
-	Description          string            `json:"description"`
-	InterfaceType        string            `json:"interface_type"`
-	Status               string            `json:"status"`
-	SenderSystemID       *string           `json:"sender_system_id"`
-	InterfaceRef         string            `json:"interface_ref"`
-	IntegrationPlatform  string            `json:"integration_platform"`
-	CpiPackageID         string            `json:"cpi_package_id"`
-	CpiIflowID           string            `json:"cpi_iflow_id"`
-	Transport            string            `json:"transport"`
-	AuthType             string            `json:"auth_type"`
-	CredentialAlias      string            `json:"credential_alias"`
-	EdgeStyle            string            `json:"edge_style"`
-	EdgeRouting          string            `json:"edge_routing"`
-	DebugTriggerEnabled  bool              `json:"debug_trigger_enabled"`
-	DebugTriggerMethod   string            `json:"debug_trigger_method"`
-	DebugTriggerPath     string            `json:"debug_trigger_path"`
-	DebugTriggerPayload  string            `json:"debug_trigger_payload"`
-	Meta                 map[string]string `json:"meta"`
-	Receivers            []Receiver        `json:"receivers"`
-	CreatedAt            time.Time         `json:"created_at"`
-	UpdatedAt            time.Time         `json:"updated_at"`
+	UpdatedAt           time.Time         `json:"updated_at"`
 }
 
 const ifaceCols = `id, project_id, name, description, interface_type, status, sender_system_id,
 	interface_ref, integration_platform, cpi_package_id, cpi_iflow_id, transport, auth_type, credential_alias,
 	edge_style, edge_routing,
 	debug_trigger_enabled, debug_trigger_method, debug_trigger_path, debug_trigger_payload,
-	meta, created_at, updated_at`
+	meta, middleware_chain, created_at, updated_at`
 
 const recvCols = `id, interface_id, system_id, cpi_iflow_id, transport, auth_type, credential_alias, meta, created_at`
 
@@ -106,7 +114,7 @@ func (h *Handler) listInterfaces(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) getInterface(w http.ResponseWriter, r *http.Request) {
 	pid := r.PathValue("pid")
-	id := r.PathValue("id")
+	id  := r.PathValue("id")
 
 	iface, err := scanInterface(h.pool.QueryRow(r.Context(),
 		`SELECT `+ifaceCols+` FROM interfaces WHERE id=$1 AND project_id=$2`, id, pid).Scan)
@@ -151,26 +159,29 @@ func (h *Handler) createInterface(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, "name is required")
 		return
 	}
-	if body.InterfaceType == "" { body.InterfaceType = "point_to_point" }
-	if body.Status == ""        { body.Status = "design" }
-	if body.EdgeStyle == ""     { body.EdgeStyle = "solid" }
-	if body.EdgeRouting == ""   { body.EdgeRouting = "bezier" }
-	if body.Meta == nil         { body.Meta = map[string]string{} }
-	metaJSON, _ := json.Marshal(body.Meta)
+	if body.InterfaceType == ""   { body.InterfaceType = "point_to_point" }
+	if body.Status == ""          { body.Status = "design" }
+	if body.EdgeStyle == ""       { body.EdgeStyle = "solid" }
+	if body.EdgeRouting == ""     { body.EdgeRouting = "bezier" }
+	if body.Meta == nil           { body.Meta = map[string]string{} }
+	if body.MiddlewareChain == nil { body.MiddlewareChain = []MiddlewareNode{} }
+	metaJSON,  _ := json.Marshal(body.Meta)
+	chainJSON, _ := json.Marshal(body.MiddlewareChain)
 
 	iface, err := scanInterface(h.pool.QueryRow(r.Context(),
 		`INSERT INTO interfaces
 		 (project_id, name, description, interface_type, status, sender_system_id,
 		  interface_ref, integration_platform, cpi_package_id, cpi_iflow_id, transport, auth_type, credential_alias,
 		  edge_style, edge_routing,
-		  debug_trigger_enabled, debug_trigger_method, debug_trigger_path, debug_trigger_payload, meta)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+		  debug_trigger_enabled, debug_trigger_method, debug_trigger_path, debug_trigger_payload,
+		  meta, middleware_chain)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
 		 RETURNING `+ifaceCols,
 		pid, body.Name, body.Description, body.InterfaceType, body.Status, body.SenderSystemID,
 		body.InterfaceRef, body.IntegrationPlatform, body.CpiPackageID, body.CpiIflowID, body.Transport, body.AuthType, body.CredentialAlias,
 		body.EdgeStyle, body.EdgeRouting,
 		body.DebugTriggerEnabled, body.DebugTriggerMethod, body.DebugTriggerPath, body.DebugTriggerPayload,
-		metaJSON,
+		metaJSON, chainJSON,
 	).Scan)
 	if err != nil {
 		h.log.Error("create interface", "error", err)
@@ -183,14 +194,16 @@ func (h *Handler) createInterface(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) updateInterface(w http.ResponseWriter, r *http.Request) {
 	pid := r.PathValue("pid")
-	id := r.PathValue("id")
+	id  := r.PathValue("id")
 	var body interfaceBody
 	if err := decode(r, &body); err != nil {
 		apiError(w, 400, "invalid body")
 		return
 	}
-	if body.Meta == nil { body.Meta = map[string]string{} }
-	metaJSON, _ := json.Marshal(body.Meta)
+	if body.Meta == nil           { body.Meta = map[string]string{} }
+	if body.MiddlewareChain == nil { body.MiddlewareChain = []MiddlewareNode{} }
+	metaJSON,  _ := json.Marshal(body.Meta)
+	chainJSON, _ := json.Marshal(body.MiddlewareChain)
 
 	iface, err := scanInterface(h.pool.QueryRow(r.Context(),
 		`UPDATE interfaces SET
@@ -200,8 +213,8 @@ func (h *Handler) updateInterface(w http.ResponseWriter, r *http.Request) {
 		 edge_style=$13, edge_routing=$14,
 		 debug_trigger_enabled=$15, debug_trigger_method=$16,
 		 debug_trigger_path=$17, debug_trigger_payload=$18,
-		 meta=$19, updated_at=now()
-		 WHERE id=$20 AND project_id=$21
+		 meta=$19, middleware_chain=$20, updated_at=now()
+		 WHERE id=$21 AND project_id=$22
 		 RETURNING `+ifaceCols,
 		body.Name, body.Description, body.InterfaceType, body.Status, body.SenderSystemID,
 		body.InterfaceRef, body.IntegrationPlatform, body.CpiPackageID, body.CpiIflowID, body.Transport,
@@ -209,7 +222,7 @@ func (h *Handler) updateInterface(w http.ResponseWriter, r *http.Request) {
 		body.EdgeStyle, body.EdgeRouting,
 		body.DebugTriggerEnabled, body.DebugTriggerMethod,
 		body.DebugTriggerPath, body.DebugTriggerPayload,
-		metaJSON, id, pid,
+		metaJSON, chainJSON, id, pid,
 	).Scan)
 	if err != nil {
 		if isNotFound(err) {
@@ -237,7 +250,7 @@ func (h *Handler) updateInterface(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) deleteInterface(w http.ResponseWriter, r *http.Request) {
 	pid := r.PathValue("pid")
-	id := r.PathValue("id")
+	id  := r.PathValue("id")
 	res, err := h.pool.Exec(r.Context(),
 		`DELETE FROM interfaces WHERE id=$1 AND project_id=$2`, id, pid)
 	if err != nil {
@@ -345,6 +358,7 @@ type interfaceBody struct {
 	DebugTriggerPath    string            `json:"debug_trigger_path"`
 	DebugTriggerPayload string            `json:"debug_trigger_payload"`
 	Meta                map[string]string `json:"meta"`
+	MiddlewareChain     []MiddlewareNode  `json:"middleware_chain"`
 }
 
 type receiverBody struct {
@@ -361,8 +375,9 @@ type receiverBody struct {
 type scanFn func(dest ...any) error
 
 func scanInterface(scan scanFn) (Interface, error) {
-	var iface Interface
-	var rawMeta json.RawMessage
+	var iface    Interface
+	var rawMeta  json.RawMessage
+	var rawChain json.RawMessage
 	err := scan(
 		&iface.ID, &iface.ProjectID, &iface.Name, &iface.Description,
 		&iface.InterfaceType, &iface.Status, &iface.SenderSystemID,
@@ -371,7 +386,7 @@ func scanInterface(scan scanFn) (Interface, error) {
 		&iface.EdgeStyle, &iface.EdgeRouting,
 		&iface.DebugTriggerEnabled, &iface.DebugTriggerMethod,
 		&iface.DebugTriggerPath, &iface.DebugTriggerPayload,
-		&rawMeta, &iface.CreatedAt, &iface.UpdatedAt,
+		&rawMeta, &rawChain, &iface.CreatedAt, &iface.UpdatedAt,
 	)
 	if err != nil {
 		return iface, err
@@ -379,12 +394,15 @@ func scanInterface(scan scanFn) (Interface, error) {
 	if err := json.Unmarshal(rawMeta, &iface.Meta); err != nil {
 		iface.Meta = map[string]string{}
 	}
+	if err := json.Unmarshal(rawChain, &iface.MiddlewareChain); err != nil {
+		iface.MiddlewareChain = []MiddlewareNode{}
+	}
 	iface.Receivers = []Receiver{}
 	return iface, nil
 }
 
 func scanReceiver(scan scanFn) (Receiver, error) {
-	var rec Receiver
+	var rec     Receiver
 	var rawMeta json.RawMessage
 	err := scan(
 		&rec.ID, &rec.InterfaceID, &rec.SystemID, &rec.CpiIflowID,
