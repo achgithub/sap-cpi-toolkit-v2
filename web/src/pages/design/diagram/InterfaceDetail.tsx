@@ -395,6 +395,19 @@ export default function InterfaceDetail({
               <MetaEditor meta={form.meta ?? {}} onChange={m => setForm(f => ({ ...f, meta: m }))} />
             </div>
 
+            <Field label="Dependency Context">
+              <Input
+                value={form.dependency_note ?? 'none'}
+                onInput={e => setForm(f => ({ ...f, dependency_note: (e.target as unknown as HTMLInputElement).value }))}
+                placeholder="none"
+              />
+              <div style={{ fontSize: '0.7rem', color: 'var(--sapContent_LabelColor)', marginTop: '2px' }}>
+                {(form.interface_type === 'shared_library' || form.interface_type === 'utility')
+                  ? 'Required for shared/utility types — describe what consumes or depends on this interface, or leave as "none".'
+                  : 'Optional — describe dependency context or leave as "none".'}
+              </div>
+            </Field>
+
             <div style={{ display: 'flex', gap: '6px', justifyContent: 'space-between' }}>
               <Button design="Negative" onClick={onDelete}>Delete</Button>
               <div style={{ display: 'flex', gap: '6px' }}>
@@ -431,6 +444,15 @@ export default function InterfaceDetail({
             {Object.entries(iface.meta ?? {}).map(([k, v]) => (
               <InfoRow key={k} label={k}>{v}</InfoRow>
             ))}
+            <InfoRow label="Dep. Context">
+              <span style={{
+                color: iface.dependency_note && iface.dependency_note !== 'none'
+                  ? 'var(--sapTextColor)'
+                  : 'var(--sapContent_LabelColor)',
+              }}>
+                {iface.dependency_note || 'none'}
+              </span>
+            </InfoRow>
           </div>
         )}
 

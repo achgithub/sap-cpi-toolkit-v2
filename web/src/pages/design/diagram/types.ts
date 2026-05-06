@@ -76,6 +76,7 @@ export interface IFInterface {
   debug_trigger_payload: string
   meta: Record<string, string>
   middleware_chain: MiddlewareNode[]
+  dependency_note: string
   receivers: IFReceiver[]
 }
 

@@ -5,213 +5,148 @@ import (
 	"strings"
 )
 
-// DiagramResponse is the payload returned by GET /projects/{pid}/diagram.
-// It contains only the systems and interfaces that are visible given the
-// current filter — all set logic lives in SQL.
+type DiagramEdge struct {
+	SenderSystemID   string   `json:"sender_system_id"`
+	ReceiverSystemID string   `json:"receiver_system_id"`
+	Count            int      `json:"count"`
+	Refs             []string `json:"refs"`
+	Statuses         []string `json:"statuses"`
+}
+
 type DiagramResponse struct {
-	Systems    []System    `json:"systems"`
-	Interfaces []Interface `json:"interfaces"`
+	Systems []System      `json:"systems"`
+	Edges   []DiagramEdge `json:"edges"`
 }
 
-// splitParam splits a comma-separated query param into a string slice.
-// Returns nil (not an empty slice) when the param is absent or blank,
-// so callers can use nil to mean "no filter on this dimension".
-func splitParam(v string) []string {
-	if v == "" {
-		return nil
-	}
-	var out []string
-	for _, p := range strings.Split(v, ",") {
-		if t := strings.TrimSpace(p); t != "" {
-			out = append(out, t)
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-// getDiagram handles GET /projects/{pid}/diagram
+// getDiagram handles GET /diagram
 //
-// Query params (all optional, comma-separated):
-//   - systems:     UUIDs of explicitly-selected systems
-//   - infra_types: infra_type values (e.g. "AWS,Azure")
-//   - statuses:    interface status values (e.g. "active,dev")
-//
-// Filter rules (matches the old JS logic, now in SQL):
-//
-//	pool = selected system IDs ∪ systems whose infra_type is in infra_types
-//
-//	An interface is visible when:
-//	  1. status is in the statuses list (or no status filter)
-//	  2. sender is in pool AND at least one receiver is in pool  (or no pool filter)
-//	  3. anchor: when system filter is active, at least one endpoint
-//	     must be an explicitly-selected system (prevents pure infra↔infra
-//	     interfaces from appearing when a specific system is also selected)
-//
-//	A system is visible when:
-//	  • no filters → all systems
-//	  • pool active → system is in pool AND participates in a visible interface
-//	  • status-only → system participates in a visible interface
+// Algorithm:
+//  1. Build pool = selected system IDs ∪ systems whose infra_type matches.
+//  2. Query interface legs (one row per sender→receiver pair via JOIN):
+//     - Strict: sender ∈ pool AND this receiver ∈ pool
+//     - Loose:  sender ∈ pool OR  this receiver ∈ pool
+//  3. Aggregate legs into undirected edges with counts.
+//  4. Systems returned:
+//     - Strict: only systems in pool that appeared in a visible leg
+//     - Loose:  all systems that appeared (includes derived systems outside pool)
+//  5. Frontend only draws a line when both system boxes are present.
 func (h *Handler) getDiagram(w http.ResponseWriter, r *http.Request) {
-	pid := r.PathValue("pid")
 	ctx := r.Context()
 	q   := r.URL.Query()
 
-	systemIDs  := splitParam(q.Get("systems"))
+	systemIDs  := splitParam(q.Get("system_ids"))
 	infraTypes := splitParam(q.Get("infra_types"))
 	statuses   := splitParam(q.Get("statuses"))
+	domains    := splitParam(q.Get("functional_domain"))
+	projectID  := strings.TrimSpace(q.Get("delivery_project_id"))
+	strict     := q.Get("strict") != "0"
 
 	hasPool := systemIDs != nil || infraTypes != nil
 
-	// ── 1. Filtered interfaces ───────────────────────────────────────────────
-	//
-	// $1 = project_id
-	// $2 = systemIDs  (text[] | NULL)
-	// $3 = infraTypes (text[] | NULL)
-	// $4 = statuses   (text[] | NULL)
-	//
-	// The pool CTE is always defined; when $2 and $3 are both NULL it is empty
-	// but the main WHERE short-circuits via ($2 IS NULL AND $3 IS NULL).
-	ifaceRows, err := h.pool.Query(ctx, `
+	// Per-leg pool condition.
+	// Strict: both this sender and this receiver must be in pool.
+	// Loose:  at least one of sender/receiver must be in pool.
+	poolCond := `i.sender_system_id IN (SELECT id FROM pool)
+	             AND ir.system_id    IN (SELECT id FROM pool)`
+	if !strict {
+		poolCond = `(    i.sender_system_id IN (SELECT id FROM pool)
+		              OR ir.system_id        IN (SELECT id FROM pool))`
+	}
+
+	edgeRows, err := h.pool.Query(ctx, `
 		WITH pool AS (
 			SELECT id FROM systems
-			WHERE project_id = $1
-			  AND (
-			      ($2::text[] IS NOT NULL AND id::text = ANY($2))
-			   OR ($3::text[] IS NOT NULL AND infra_type = ANY($3))
-			  )
+			WHERE (
+			      ($1::text[] IS NOT NULL AND id::text = ANY($1))
+			   OR ($2::text[] IS NOT NULL AND infra_type = ANY($2))
+			)
 		)
-		SELECT `+ifaceCols+`
+		SELECT i.sender_system_id::text,
+		       ir.system_id::text,
+		       i.ref,
+		       i.status
 		FROM   interfaces i
-		WHERE  i.project_id = $1
-		  AND  ($4::text[] IS NULL OR i.status = ANY($4))
+		JOIN   interface_receivers ir ON ir.interface_id = i.id
+		WHERE  ir.system_id IS NOT NULL
+		  AND  i.sender_system_id IS NOT NULL
+		  AND  ($3::text[] IS NULL OR i.status            = ANY($3))
+		  AND  ($4::text[] IS NULL OR i.functional_domain = ANY($4))
+		  AND  ($5 = ''            OR i.delivery_project_id::text = $5)
 		  AND  (
-		         -- No pool filter: include everything
-		         ($2::text[] IS NULL AND $3::text[] IS NULL)
-		      OR (
-		              -- sender in pool
-		              EXISTS (SELECT 1 FROM pool WHERE id = i.sender_system_id)
-		              -- at least one receiver in pool
-		          AND EXISTS (
-		                  SELECT 1 FROM interface_receivers ir
-		                  JOIN   pool p ON ir.system_id = p.id
-		                  WHERE  ir.interface_id = i.id
-		              )
-		              -- anchor: when system IDs provided, at least one endpoint
-		              -- must be explicitly selected (not just infra-matched)
-		          AND (
-		                  $2::text[] IS NULL
-		               OR i.sender_system_id::text = ANY($2)
-		               OR EXISTS (
-		                      SELECT 1 FROM interface_receivers ir2
-		                      WHERE  ir2.interface_id = i.id
-		                        AND  ir2.system_id::text = ANY($2)
-		                  )
-		              )
-		          )
-		       )
-		ORDER BY i.name`,
-		pid, systemIDs, infraTypes, statuses,
+		         ($1::text[] IS NULL AND $2::text[] IS NULL)
+		      OR (`+poolCond+`)
+		       )`,
+		systemIDs, infraTypes, statuses, domains, projectID,
 	)
 	if err != nil {
-		h.log.Error("diagram: query interfaces", "error", err)
+		h.log.Error("diagram: query edges", "error", err)
 		apiError(w, 500, "internal error")
 		return
 	}
-	defer ifaceRows.Close()
+	defer edgeRows.Close()
 
-	ifaces := []Interface{}
-	for ifaceRows.Next() {
-		iface, err := scanInterface(ifaceRows.Scan)
-		if err != nil {
-			h.log.Error("diagram: scan interface", "error", err)
-			apiError(w, 500, "internal error")
-			return
-		}
-		ifaces = append(ifaces, iface)
-	}
-	ifaceRows.Close()
-
-	// ── 2. Receivers for filtered interfaces ─────────────────────────────────
-	if len(ifaces) > 0 {
-		ifaceIDs := make([]string, len(ifaces))
-		idx      := map[string]int{}
-		for i, f := range ifaces {
-			ifaceIDs[i] = f.ID
-			idx[f.ID]   = i
-		}
-		recvRows, err := h.pool.Query(ctx,
-			`SELECT `+recvCols+`
-			 FROM   interface_receivers
-			 WHERE  interface_id::text = ANY($1)
-			 ORDER  BY created_at`, ifaceIDs)
-		if err != nil {
-			h.log.Error("diagram: query receivers", "error", err)
-			apiError(w, 500, "internal error")
-			return
-		}
-		defer recvRows.Close()
-		for recvRows.Next() {
-			rec, err := scanReceiver(recvRows.Scan)
-			if err != nil {
-				h.log.Error("diagram: scan receiver", "error", err)
-				apiError(w, 500, "internal error")
-				return
-			}
-			if i, ok := idx[rec.InterfaceID]; ok {
-				ifaces[i].Receivers = append(ifaces[i].Receivers, rec)
-			}
-		}
-	}
-
-	// ── 3. Derive used system IDs from filtered interfaces ───────────────────
+	type edgeKey struct{ a, b string }
+	edgeMap := map[edgeKey]*DiagramEdge{}
 	usedIDs := map[string]bool{}
-	for _, f := range ifaces {
-		if f.SenderSystemID != nil {
-			usedIDs[*f.SenderSystemID] = true
+
+	for edgeRows.Next() {
+		var senderID, receiverID, ref, status string
+		if err := edgeRows.Scan(&senderID, &receiverID, &ref, &status); err != nil {
+			h.log.Error("diagram: scan edge", "error", err)
+			apiError(w, 500, "internal error")
+			return
 		}
-		for _, rec := range f.Receivers {
-			if rec.SystemID != nil {
-				usedIDs[*rec.SystemID] = true
-			}
+		a, b := senderID, receiverID
+		if a > b {
+			a, b = b, a
 		}
+		key := edgeKey{a, b}
+		if _, ok := edgeMap[key]; !ok {
+			edgeMap[key] = &DiagramEdge{SenderSystemID: a, ReceiverSystemID: b}
+		}
+		edgeMap[key].Count++
+		edgeMap[key].Refs     = append(edgeMap[key].Refs,     ref)
+		edgeMap[key].Statuses = append(edgeMap[key].Statuses, status)
+		usedIDs[senderID]   = true
+		usedIDs[receiverID] = true
+	}
+	edgeRows.Close()
+
+	edges := make([]DiagramEdge, 0, len(edgeMap))
+	for _, e := range edgeMap {
+		edges = append(edges, *e)
 	}
 
-	// ── 4. Visible systems ───────────────────────────────────────────────────
+	// ── Systems ───────────────────────────────────────────────────────────────
 	var (
 		sysQuery string
 		sysArgs  []any
 	)
 
 	switch {
-	case !hasPool && statuses == nil:
-		// No filters at all — return every system in the project
-		sysQuery = `SELECT ` + systemCols + ` FROM systems WHERE project_id=$1 ORDER BY name`
-		sysArgs  = []any{pid}
+	case !hasPool && statuses == nil && domains == nil && projectID == "":
+		sysQuery = `SELECT ` + systemCols + ` FROM systems ORDER BY name`
 
 	case len(usedIDs) == 0:
-		// Filters active but nothing matched — return nothing
+		// filters active but nothing matched — return no systems
 
-	case hasPool:
-		// Pool filter: system must be in pool AND participate in a visible interface
+	case hasPool && strict:
+		// Strict: return only pool systems that appeared in visible legs
 		used := setToSlice(usedIDs)
 		sysQuery = `SELECT ` + systemCols + ` FROM systems
-			WHERE project_id = $1
-			  AND id::text = ANY($2)
+			WHERE id::text = ANY($1)
 			  AND (
-			      ($3::text[] IS NOT NULL AND id::text = ANY($3))
-			   OR ($4::text[] IS NOT NULL AND infra_type = ANY($4))
-			  )
+			        ($2::text[] IS NOT NULL AND id::text  = ANY($2))
+			     OR ($3::text[] IS NOT NULL AND infra_type = ANY($3))
+			      )
 			ORDER BY name`
-		sysArgs = []any{pid, used, systemIDs, infraTypes}
+		sysArgs = []any{used, systemIDs, infraTypes}
 
 	default:
-		// Status-only filter: any system that participates in a visible interface
+		// Loose or status/domain-only: return every system that appeared
 		sysQuery = `SELECT ` + systemCols + ` FROM systems
-			WHERE project_id=$1 AND id::text = ANY($2) ORDER BY name`
-		sysArgs = []any{pid, setToSlice(usedIDs)}
+			WHERE id::text = ANY($1) ORDER BY name`
+		sysArgs = []any{setToSlice(usedIDs)}
 	}
 
 	systems := []System{}
@@ -234,7 +169,23 @@ func (h *Handler) getDiagram(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	jsonResp(w, 200, DiagramResponse{Systems: systems, Interfaces: ifaces})
+	jsonResp(w, 200, DiagramResponse{Systems: systems, Edges: edges})
+}
+
+func splitParam(v string) []string {
+	if v == "" {
+		return nil
+	}
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func setToSlice(m map[string]bool) []string {

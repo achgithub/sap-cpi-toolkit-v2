@@ -3,13 +3,14 @@ import type { IFSystem, RegistryConfig } from './types'
 import { STATUSES, STATUS_COLORS } from './types'
 
 export interface DiagramFilter {
-  systems:    string[]   // specific system IDs (strict: only between selected)
+  systems:    string[]   // specific system IDs
   statuses:   string[]   // interface status
   infraTypes: string[]   // system.infra_type values (e.g. On-Prem, AWS)
+  strict:     boolean    // when true, ALL receivers must be in pool (default)
 }
 
 export const emptyFilter = (): DiagramFilter =>
-  ({ systems: [], statuses: [], infraTypes: [] })
+  ({ systems: [], statuses: [], infraTypes: [], strict: true })
 
 export function activeFilterCount(f: DiagramFilter) {
   return (f.systems.length ? 1 : 0) + (f.statuses.length ? 1 : 0) +
@@ -201,24 +202,43 @@ export default function DiagramFilters({ systems, config, filter, onChange }: Pr
         onChange={v => onChange({ ...filter, infraTypes: v })}
       />
 
-      {count > 0 && (
-        <>
-          <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)' }}>
-            {count} active
-          </span>
-          <button
-            onClick={() => onChange(emptyFilter())}
-            style={{
-              padding: '3px 8px', cursor: 'pointer',
-              border: '1px solid var(--sapList_BorderColor)', borderRadius: '4px',
-              background: 'transparent', fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem',
-              color: 'var(--sapTextColor)',
-            }}
-          >
-            Clear all
-          </button>
-        </>
-      )}
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}>
+        {count > 0 && (
+          <>
+            <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)' }}>
+              {count} active
+            </span>
+            <button
+              onClick={() => onChange({ ...emptyFilter(), strict: filter.strict })}
+              style={{
+                padding: '3px 8px', cursor: 'pointer',
+                border: '1px solid var(--sapList_BorderColor)', borderRadius: '4px',
+                background: 'transparent', fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem',
+                color: 'var(--sapTextColor)',
+              }}
+            >
+              Clear all
+            </button>
+          </>
+        )}
+        <button
+          onClick={() => onChange({ ...filter, strict: !filter.strict })}
+          title={filter.strict
+            ? 'Strict: all receivers must be within the pool. Click to allow derived systems.'
+            : 'Loose: interfaces that touch the pool are shown, pulling in derived systems. Click for strict.'}
+          style={{
+            padding: '3px 10px', cursor: 'pointer',
+            border: `1px solid ${filter.strict ? 'var(--sapHighlightColor)' : 'var(--sapList_BorderColor)'}`,
+            borderRadius: '14px',
+            background: filter.strict ? 'var(--sapHighlightColor)' : 'var(--sapTile_Background)',
+            color: filter.strict ? '#fff' : 'var(--sapTextColor)',
+            fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Strict
+        </button>
+      </div>
     </div>
   )
 }

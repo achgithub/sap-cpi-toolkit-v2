@@ -10,7 +10,7 @@ export interface PhaseNavItem {
 interface Props {
   storageKey: string
   items: PhaseNavItem[]
-  children: (activeId: string) => ReactNode
+  children: (activeId: string, setActiveId: (id: string) => void) => ReactNode
 }
 
 export default function PhaseLayout({ storageKey, items, children }: Props) {
@@ -62,7 +62,7 @@ export default function PhaseLayout({ storageKey, items, children }: Props) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {children(activeId)}
+        {children(activeId, select)}
       </div>
 
     </div>

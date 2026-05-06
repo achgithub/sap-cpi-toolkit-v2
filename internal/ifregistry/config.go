@@ -5,7 +5,6 @@ import (
 	"net/http"
 )
 
-// getConfig returns a named config value as raw JSON.
 func (h *Handler) getConfig(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 	var raw json.RawMessage
@@ -17,7 +16,7 @@ func (h *Handler) getConfig(w http.ResponseWriter, r *http.Request) {
 			apiError(w, 404, "not found")
 			return
 		}
-		h.log.Error("get config", "key", key, "error", err)
+		h.log.Error("get config", "error", err)
 		apiError(w, 500, "internal error")
 		return
 	}
@@ -26,25 +25,23 @@ func (h *Handler) getConfig(w http.ResponseWriter, r *http.Request) {
 	w.Write(raw) //nolint:errcheck
 }
 
-// putConfig replaces a named config value (must be a JSON array).
 func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 	var raw json.RawMessage
-	if err := decode(r, &raw); err != nil {
-		apiError(w, 400, "invalid JSON body")
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+		apiError(w, 400, "invalid JSON")
 		return
 	}
+
 	_, err := h.pool.Exec(r.Context(),
-		`INSERT INTO registry_config (key, value, updated_at) VALUES ($1,$2,now())
-		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`,
+		`INSERT INTO registry_config (key, value) VALUES ($1,$2)
+		 ON CONFLICT (key) DO UPDATE SET value=$2, updated_at=now()`,
 		key, raw,
 	)
 	if err != nil {
-		h.log.Error("put config", "key", key, "error", err)
+		h.log.Error("put config", "error", err)
 		apiError(w, 500, "internal error")
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	w.Write(raw) //nolint:errcheck
+	w.WriteHeader(204)
 }

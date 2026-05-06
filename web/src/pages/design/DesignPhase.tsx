@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { emptyFilter, type DiagramFilter } from '../registry/useRegistryApi'
 import {
   Button, Dialog, Bar, Input, Label, MessageStrip,
   FlexBox, FlexBoxJustifyContent,
@@ -7,8 +8,9 @@ import PhaseLayout from '../../components/PhaseLayout'
 import { useWorkspace, type Project } from '../../context/WorkspaceContext'
 import ProjectSetup from './ProjectSetup'
 import ProjectAdapterTemplates from '../../tools/ProjectAdapterTemplates'
-import DiagramView from './diagram/DiagramView'
-import InterfaceView from './diagram/InterfaceView'
+import ArchitectureView from '../registry/ArchitectureView'
+import RegistryGrid from '../registry/RegistryGrid'
+import SystemView from '../registry/SystemView'
 
 interface ProjectForm { name: string; description: string }
 const emptyForm = (): ProjectForm => ({ name: '', description: '' })
@@ -165,10 +167,12 @@ function ProjectsSection() {
 // ── Design phase shell with sub-nav ──────────────────────────────────────────
 
 const DESIGN_NAV = [
-  { id: 'projects',       label: 'Projects',        icon: 'business-objects-experience' },
-  { id: 'templates',      label: 'Templates',        icon: 'wrench'                      },
-  { id: 'diagram',        label: 'Global Diagram',   icon: 'org-chart'                   },
-  { id: 'interface-view', label: 'Interface View',   icon: 'detail-view'                 },
+  { id: 'projects',      label: 'Projects',      icon: 'business-objects-experience' },
+  { id: 'templates',     label: 'Templates',     icon: 'wrench'                      },
+  { id: 'architecture',  label: 'Architecture',  icon: 'org-chart'                   },
+  { id: 'flow',          label: 'Flow Diagram',  icon: 'process'                     },
+  { id: 'registry',      label: 'Registry',      icon: 'detail-view'                 },
+  { id: 'systems',       label: 'Systems',       icon: 'it-system'                   },
 ]
 
 function PhasePlaceholder({ title, description }: { title: string; description: string }) {
@@ -208,14 +212,42 @@ function TemplatesSection() {
 }
 
 export default function DesignPhase() {
+  const [archFilter,     setArchFilter]     = useState<DiagramFilter>(emptyFilter())
+  const [registryFilter, setRegistryFilter] = useState<{ sender?: string; receiver?: string }>({})
+  const [fromArch,       setFromArch]       = useState(false)
+
   return (
     <PhaseLayout storageKey="v2-design" items={DESIGN_NAV}>
-      {(id) => (
+      {(id, setId) => (
         <>
-          {id === 'projects'       && <ProjectsSection />}
-          {id === 'templates'      && <TemplatesSection />}
-          {id === 'diagram'        && <DiagramView />}
-          {id === 'interface-view' && <InterfaceView />}
+          {id === 'projects'     && <ProjectsSection />}
+          {id === 'templates'    && <TemplatesSection />}
+          {id === 'architecture' && (
+            <ArchitectureView
+              filter={archFilter}
+              onFilterChange={setArchFilter}
+              onOpenRegistry={(sender, receiver) => {
+                setRegistryFilter({ sender, receiver })
+                setFromArch(true)
+                setId('registry')
+              }}
+            />
+          )}
+          {id === 'flow' && (
+            <PhasePlaceholder
+              title="Flow Diagram"
+              description="Per logical group or standalone interface — shows the delivery/support flow with sender, middleware, receiver, firewalls, and numbered steps. Coming next."
+            />
+          )}
+          {id === 'registry' && (
+            <RegistryGrid
+              key={`${registryFilter.sender ?? ''}-${registryFilter.receiver ?? ''}`}
+              initialSenderSystemId={registryFilter.sender}
+              initialReceiverSystemId={registryFilter.receiver}
+              onBack={fromArch ? () => { setFromArch(false); setId('architecture') } : undefined}
+            />
+          )}
+          {id === 'systems' && <SystemView />}
         </>
       )}
     </PhaseLayout>

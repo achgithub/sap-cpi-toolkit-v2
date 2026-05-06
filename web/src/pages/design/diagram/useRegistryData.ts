@@ -22,6 +22,7 @@ export function useRegistryData(projectId: string) {
     if (filter.systems.length)    params.set('systems',     filter.systems.join(','))
     if (filter.statuses.length)   params.set('statuses',    filter.statuses.join(','))
     if (filter.infraTypes.length) params.set('infra_types', filter.infraTypes.join(','))
+    if (!filter.strict)           params.set('strict',      '0')
     const res = await fetch(`${BASE}/projects/${projectId}/diagram?${params}`)
     if (!res.ok) throw new Error('Failed to load diagram')
     return res.json() as Promise<{ systems: IFSystem[], interfaces: IFInterface[] }>

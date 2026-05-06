@@ -19,45 +19,44 @@ func New(pool *pgxpool.Pool, log *slog.Logger) *Handler {
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
-	// Systems
-	mux.HandleFunc("GET /projects/{pid}/systems",          h.listSystems)
-	mux.HandleFunc("POST /projects/{pid}/systems",         h.createSystem)
-	mux.HandleFunc("PUT /projects/{pid}/systems/{id}",     h.updateSystem)
-	mux.HandleFunc("DELETE /projects/{pid}/systems/{id}",  h.deleteSystem)
+	// Systems (company-wide)
+	mux.HandleFunc("GET /systems",         h.listSystems)
+	mux.HandleFunc("POST /systems",        h.createSystem)
+	mux.HandleFunc("PUT /systems/{id}",    h.updateSystem)
+	mux.HandleFunc("DELETE /systems/{id}", h.deleteSystem)
 
-	// Interfaces
-	mux.HandleFunc("GET /projects/{pid}/interfaces",             h.listInterfaces)
-	mux.HandleFunc("POST /projects/{pid}/interfaces",            h.createInterface)
-	mux.HandleFunc("GET /projects/{pid}/interfaces/{id}",        h.getInterface)
-	mux.HandleFunc("PUT /projects/{pid}/interfaces/{id}",        h.updateInterface)
-	mux.HandleFunc("DELETE /projects/{pid}/interfaces/{id}",     h.deleteInterface)
+	// Logical groups
+	mux.HandleFunc("GET /logical-groups",          h.listLogicalGroups)
+	mux.HandleFunc("POST /logical-groups",         h.createLogicalGroup)
+	mux.HandleFunc("PUT /logical-groups/{id}",     h.updateLogicalGroup)
+	mux.HandleFunc("DELETE /logical-groups/{id}",  h.deleteLogicalGroup)
+
+	// Interfaces (company-wide)
+	mux.HandleFunc("GET /interfaces",         h.listInterfaces)
+	mux.HandleFunc("POST /interfaces",        h.createInterface)
+	mux.HandleFunc("GET /interfaces/{id}",    h.getInterface)
+	mux.HandleFunc("PUT /interfaces/{id}",    h.updateInterface)
+	mux.HandleFunc("DELETE /interfaces/{id}", h.deleteInterface)
 
 	// Receivers
-	mux.HandleFunc("POST /projects/{pid}/interfaces/{id}/receivers",           h.addReceiver)
-	mux.HandleFunc("PUT /projects/{pid}/interfaces/{id}/receivers/{rid}",      h.updateReceiver)
-	mux.HandleFunc("DELETE /projects/{pid}/interfaces/{id}/receivers/{rid}",   h.deleteReceiver)
+	mux.HandleFunc("POST /interfaces/{id}/receivers",         h.addReceiver)
+	mux.HandleFunc("PUT /interfaces/{id}/receivers/{rid}",    h.updateReceiver)
+	mux.HandleFunc("DELETE /interfaces/{id}/receivers/{rid}", h.deleteReceiver)
 
-	// Interface dependencies
-	mux.HandleFunc("GET /projects/{pid}/interfaces/{id}/dependencies",         h.listDependencies)
-	mux.HandleFunc("POST /projects/{pid}/interfaces/{id}/dependencies",        h.addDependency)
-	mux.HandleFunc("DELETE /projects/{pid}/interfaces/{id}/dependencies/{did}", h.deleteDependency)
+	// Dependencies
+	mux.HandleFunc("GET /interfaces/{id}/dependencies",          h.listDependencies)
+	mux.HandleFunc("POST /interfaces/{id}/dependencies",         h.addDependency)
+	mux.HandleFunc("DELETE /interfaces/{id}/dependencies/{did}", h.deleteDependency)
 
-	// Interface canvas elements
-	mux.HandleFunc("GET /projects/{pid}/interfaces/{id}/canvas",          h.listCanvas)
-	mux.HandleFunc("POST /projects/{pid}/interfaces/{id}/canvas",         h.addCanvas)
-	mux.HandleFunc("PUT /projects/{pid}/interfaces/{id}/canvas/{eid}",    h.updateCanvas)
-	mux.HandleFunc("DELETE /projects/{pid}/interfaces/{id}/canvas/{eid}", h.deleteCanvas)
+	// Architecture diagram
+	mux.HandleFunc("GET /diagram", h.getDiagram)
 
-	// Filtered diagram data (systems + interfaces resolved in SQL)
-	mux.HandleFunc("GET /projects/{pid}/diagram", h.getDiagram)
-
-	// Global config (system types, infra types, integration platforms)
-	mux.HandleFunc("GET /config/{key}",  h.getConfig)
-	mux.HandleFunc("PUT /config/{key}",  h.putConfig)
-
-	// Dev-only seed endpoint — remove seed.go after load testing
-	mux.HandleFunc("POST /projects/{pid}/debug/seed", h.seedDemo)
+	// Registry config
+	mux.HandleFunc("GET /config/{key}", h.getConfig)
+	mux.HandleFunc("PUT /config/{key}", h.putConfig)
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 func jsonResp(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -77,3 +76,5 @@ func decode(r *http.Request, v any) error {
 func isNotFound(err error) bool {
 	return err == pgx.ErrNoRows
 }
+
+type scanFn func(dest ...any) error
