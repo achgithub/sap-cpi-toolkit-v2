@@ -170,17 +170,6 @@ const LABEL_W  = 58   // approx px width of a ref label pill at font-size 10
 const PILL_H   = 18   // pill height in screen px
 const MIN_STEP = 130  // minimum centre-to-centre spacing in screen px
 
-function pointAlongPath(pts: Point[], target: number, segs: number[]): Point {
-  let remaining = target
-  for (let si = 0; si < segs.length; si++) {
-    if (remaining <= segs[si]) {
-      const t = remaining / segs[si]
-      return { x: pts[si].x + t * (pts[si + 1].x - pts[si].x), y: pts[si].y + t * (pts[si + 1].y - pts[si].y) }
-    }
-    remaining -= segs[si]
-  }
-  return pts[pts.length - 1]
-}
 
 function EdgeRefLabels({ pts, refs, color, scale }: {
   pts: Point[]; refs: string[]; color: string; scale: number
