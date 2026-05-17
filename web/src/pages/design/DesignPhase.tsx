@@ -12,6 +12,7 @@ import ArchitectureView from '../registry/ArchitectureView'
 import RegistryGrid from '../registry/RegistryGrid'
 import SystemView from '../registry/SystemView'
 import FlowDiagram from '../registry/FlowDiagram'
+import GroupDiagramCyto from '../registry/GroupDiagramCyto'
 
 interface ProjectForm { name: string; description: string }
 const emptyForm = (): ProjectForm => ({ name: '', description: '' })
@@ -172,6 +173,7 @@ const DESIGN_NAV = [
   { id: 'templates',     label: 'Templates',     icon: 'wrench'                      },
   { id: 'architecture',  label: 'Architecture',  icon: 'org-chart'                   },
   { id: 'flow',          label: 'Flow Diagram',  icon: 'process'                     },
+  { id: 'group',         label: 'Group Diagram', icon: 'group'                       },
   { id: 'registry',      label: 'Registry',      icon: 'detail-view'                 },
   { id: 'systems',       label: 'Systems',       icon: 'it-system'                   },
 ]
@@ -234,7 +236,8 @@ export default function DesignPhase() {
               }}
             />
           )}
-          {id === 'flow' && <FlowDiagram />}
+          {id === 'flow'  && <FlowDiagram />}
+          {id === 'group' && <GroupDiagramCyto />}
           {id === 'registry' && (
             <RegistryGrid
               key={`${registryFilter.sender ?? ''}-${registryFilter.receiver ?? ''}`}
