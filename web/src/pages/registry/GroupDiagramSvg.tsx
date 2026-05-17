@@ -301,8 +301,11 @@ function buildEdgePaths(
       const LABEL_T = [0.1, 0.3, 0.5, 0.7, 0.9]
       const tCanon  = LABEL_T[labelIdx % LABEL_T.length]
       const t       = e.fromId === canonicalFromId ? tCanon : 1 - tCanon
-      const lx = (1-t)*p1.x + t*p2.x
-      const ly = (1-t)*p1.y + t*p2.y
+      // Add half the arc's perpendicular offset so arcs sharing the same t-slot
+      // don't stack at the same screen position. Without this, chord interpolation
+      // gives identical (lx,ly) for every arc at the same t-value.
+      const lx = (1-t)*p1.x + t*p2.x + canon_px * offset * 0.5
+      const ly = (1-t)*p1.y + t*p2.y + canon_py * offset * 0.5
 
       const screenDist = len * zoom
       // Empty ref = routing-only edge (shared via hop), no label pill
