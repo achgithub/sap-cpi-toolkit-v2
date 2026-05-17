@@ -166,62 +166,62 @@ interface Popup {
 
 // ── EdgeRefLabels ─────────────────────────────────────────────────────────────
 
-const LABEL_W   = 56   // approx px width of a ref label pill at font-size 10
-const MIN_STEP  = 90   // minimum centre-to-centre spacing in screen px before falling back
+const LABEL_W  = 58   // approx px width of a ref label pill at font-size 10
+const PILL_H   = 18   // pill height in screen px
+const MIN_STEP = 130  // minimum centre-to-centre spacing in screen px
+
+function pointAlongPath(pts: Point[], target: number, segs: number[]): Point {
+  let remaining = target
+  for (let si = 0; si < segs.length; si++) {
+    if (remaining <= segs[si]) {
+      const t = remaining / segs[si]
+      return { x: pts[si].x + t * (pts[si + 1].x - pts[si].x), y: pts[si].y + t * (pts[si + 1].y - pts[si].y) }
+    }
+    remaining -= segs[si]
+  }
+  return pts[pts.length - 1]
+}
 
 function EdgeRefLabels({ pts, refs, color, scale }: {
   pts: Point[]; refs: string[]; color: string; scale: number
 }) {
   if (!refs.length || pts.length < 2) return null
 
-  // Total path length in canvas units
-  const segs = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y))
+  const segs  = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y))
   const total = segs.reduce((s, l) => s + l, 0)
 
-  // How many labels genuinely fit with comfortable spacing?
-  // MIN_STEP is in screen px, convert to canvas units for comparison
+  // How many labels fit with comfortable spacing (canvas units)?
   const minStepCanvas = MIN_STEP / scale
-  const maxFit = Math.max(1, Math.floor((total - minStepCanvas) / minStepCanvas))
+  const maxFit   = Math.max(1, Math.floor((total - minStepCanvas * 0.5) / minStepCanvas))
   const visible  = refs.slice(0, maxFit)
   const overflow = refs.length > visible.length
+  const count    = visible.length + (overflow ? 1 : 0)
+  const step     = total / (count + 1)
 
-  // Evenly space the visible labels + optional overflow indicator
-  const count = visible.length + (overflow ? 1 : 0)
-  const step  = total / (count + 1)
-
-  const labels: Array<{ x: number; y: number; text: string }> = []
-
-  for (let li = 0; li < count; li++) {
-    const target = step * (li + 1)
-    const text   = li < visible.length ? visible[li].trim() : '…'
-
-    // Walk path segments to find the point at `target` distance
-    let remaining = target
-    let found = pts[0]
-    for (let si = 0; si < segs.length; si++) {
-      if (remaining <= segs[si]) {
-        const t = remaining / segs[si]
-        found = { x: pts[si].x + t * (pts[si + 1].x - pts[si].x), y: pts[si].y + t * (pts[si + 1].y - pts[si].y) }
-        break
-      }
-      remaining -= segs[si]
-      found = pts[si + 1]
-    }
-    labels.push({ ...found, text })
-  }
+  const lw = LABEL_W / scale
+  const lh = PILL_H  / scale
+  const fs = 10      / scale
 
   return (
     <>
-      {labels.map((l, i) => (
-        <g key={i} transform={`translate(${l.x},${l.y})`} style={{ pointerEvents: 'none' }}>
-          <rect x={-(LABEL_W / 2) / scale} y={-9 / scale} width={LABEL_W / scale} height={14 / scale}
-            rx={3 / scale} fill={color} opacity={0.85} />
-          <text textAnchor="middle" dominantBaseline="middle"
-            fontSize={10 / scale} fill="#fff" fontFamily="var(--sapFontFamily)">
-            {l.text}
-          </text>
-        </g>
-      ))}
+      {Array.from({ length: count }, (_, li) => {
+        const pt   = pointAlongPath(pts, step * (li + 1), segs)
+        const text = li < visible.length ? visible[li].trim() : '…'
+        return (
+          <g key={li} transform={`translate(${pt.x},${pt.y})`} style={{ pointerEvents: 'none' }}>
+            {/* White halo so pill stands out over the line */}
+            <rect x={-lw / 2 - 2 / scale} y={-lh / 2 - 2 / scale}
+              width={lw + 4 / scale} height={lh + 4 / scale}
+              rx={(lh / 2) + 2 / scale} fill="white" />
+            <rect x={-lw / 2} y={-lh / 2} width={lw} height={lh}
+              rx={lh / 2} fill={color} />
+            <text textAnchor="middle" dominantBaseline="middle"
+              fontSize={fs} fill="#fff" fontWeight="600" fontFamily="var(--sapFontFamily)">
+              {text}
+            </text>
+          </g>
+        )
+      })}
     </>
   )
 }
@@ -448,40 +448,18 @@ export default function ArchitectureCanvas({ systems, edges, config, onNodeMoved
             </marker>
           </defs>
 
-          {/* Edges */}
+          {/* Pass 1: edge lines + hit areas (below nodes) */}
           {edges.map(edge => {
             const pts = getEdgePts(edge)
             if (pts.length < 2) return null
             const key   = edgeKey(edge)
             const color = edgeColors[key] ?? '#888'
-            const mid   = midpointAlongPath(pts)
             return (
               <g key={key}>
-                {/* Invisible wide hit area */}
-                <polyline
-                  points={pointsAttr(pts)}
-                  fill="none" stroke="transparent" strokeWidth={16}
-                  style={{ cursor: 'pointer' }}
-                  onClick={e => onEdgeClick(e, edge)}
-                />
-                {/* Visible line */}
-                <polyline
-                  points={pointsAttr(pts)}
-                  fill="none" stroke={color} strokeWidth={2}
-                  style={{ pointerEvents: 'none' }}
-                />
-                {/* Count badge or distributed ref labels */}
-                {!showRefs ? (
-                  <g transform={`translate(${mid.x},${mid.y})`} style={{ pointerEvents: 'none' }}>
-                    <rect x={-14} y={-10} width={28} height={20} rx={10} fill={color} opacity={0.9} />
-                    <text textAnchor="middle" dominantBaseline="middle"
-                      fontSize={11} fill="#fff" fontFamily="var(--sapFontFamily)">
-                      {edge.count}
-                    </text>
-                  </g>
-                ) : (
-                  <EdgeRefLabels pts={pts} refs={edge.refs} color={color} scale={scale} />
-                )}
+                <polyline points={pointsAttr(pts)} fill="none" stroke="transparent" strokeWidth={16}
+                  style={{ cursor: 'pointer' }} onClick={e => onEdgeClick(e, edge)} />
+                <polyline points={pointsAttr(pts)} fill="none" stroke={color} strokeWidth={2}
+                  style={{ pointerEvents: 'none' }} />
               </g>
             )
           })}
@@ -525,6 +503,30 @@ export default function ArchitectureCanvas({ systems, edges, config, onNodeMoved
                     style={{ userSelect: 'none', pointerEvents: 'none' }}>
                     {infraLine}
                   </text>
+                )}
+              </g>
+            )
+          })}
+
+          {/* Pass 2: edge badges/labels — rendered after nodes so always on top */}
+          {edges.map(edge => {
+            const pts = getEdgePts(edge)
+            if (pts.length < 2) return null
+            const key   = edgeKey(edge)
+            const color = edgeColors[key] ?? '#888'
+            const mid   = midpointAlongPath(pts)
+            return (
+              <g key={`lbl-${key}`} style={{ pointerEvents: 'none' }}>
+                {!showRefs ? (
+                  <g transform={`translate(${mid.x},${mid.y})`}>
+                    <rect x={-14} y={-10} width={28} height={20} rx={10} fill={color} opacity={0.9} />
+                    <text textAnchor="middle" dominantBaseline="middle"
+                      fontSize={11} fill="#fff" fontFamily="var(--sapFontFamily)">
+                      {edge.count}
+                    </text>
+                  </g>
+                ) : (
+                  <EdgeRefLabels pts={pts} refs={edge.refs} color={color} scale={scale} />
                 )}
               </g>
             )
