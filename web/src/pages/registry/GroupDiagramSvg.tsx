@@ -10,7 +10,7 @@ const HOP_W       = 120
 const HOP_H       = 40
 const ACCENT_H    = 6
 const MIN_LABEL_PX = 100   // screen px straight-line distance needed to show ref label
-const OFFSET_STEP  = 32    // canvas px between parallel arcs
+const OFFSET_STEP  = 55    // canvas px between parallel arcs
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -284,6 +284,8 @@ function MiniMap({ nodeDefs, posMap, pan, zoom, containerW, containerH, onNaviga
   containerH: number
   onNavigate: (pan: { x: number; y: number }) => void
 }) {
+  const mmDragRef = useRef<{ startMx: number; startMy: number; startPan: { x: number; y: number } } | null>(null)
+
   if (!nodeDefs.length) return null
 
   const xs = nodeDefs.map(n => posMap[n.id]?.x ?? 0)
@@ -292,33 +294,33 @@ function MiniMap({ nodeDefs, posMap, pan, zoom, containerW, containerH, onNaviga
   const minY = Math.min(...ys) - 40
   const maxX = Math.max(...xs) + NODE_W + 40
   const maxY = Math.max(...ys) + NODE_H + 40
-  const extW = Math.max(maxX - minX, 1)
-  const extH = Math.max(maxY - minY, 1)
-
-  const scaleX = MM_W / extW
-  const scaleY = MM_H / extH
-  const mmScale = Math.min(scaleX, scaleY)
-
-  // Viewport rect in canvas coords
-  const vpLeft   = -pan.x / zoom
-  const vpTop    = -pan.y / zoom
-  const vpRight  = (containerW - pan.x) / zoom
-  const vpBottom = (containerH - pan.y) / zoom
-
-  const toMM = (cx: number, cy: number) => ({
-    x: (cx - minX) * mmScale,
-    y: (cy - minY) * mmScale,
-  })
+  const mmScale = Math.min(MM_W / Math.max(maxX - minX, 1), MM_H / Math.max(maxY - minY, 1))
 
   const vpMM = {
-    x: (vpLeft  - minX) * mmScale,
-    y: (vpTop   - minY) * mmScale,
-    w: (vpRight  - vpLeft) * mmScale,
-    h: (vpBottom - vpTop)  * mmScale,
+    x: ((-pan.x / zoom) - minX) * mmScale,
+    y: ((-pan.y / zoom) - minY) * mmScale,
+    w: (containerW / zoom) * mmScale,
+    h: (containerH / zoom) * mmScale,
   }
 
-  function onClick(e: React.MouseEvent<SVGSVGElement>) {
-    const rect = e.currentTarget.getBoundingClientRect()
+  function onVpMouseDown(e: React.MouseEvent) {
+    e.stopPropagation()
+    mmDragRef.current = { startMx: e.clientX, startMy: e.clientY, startPan: pan }
+  }
+
+  function onSvgMouseMove(e: React.MouseEvent) {
+    if (!mmDragRef.current) return
+    const { startMx, startMy, startPan } = mmDragRef.current
+    const ddx = e.clientX - startMx
+    const ddy = e.clientY - startMy
+    onNavigate({ x: startPan.x - (ddx / mmScale) * zoom, y: startPan.y - (ddy / mmScale) * zoom })
+  }
+
+  function onSvgMouseUp() { mmDragRef.current = null }
+
+  function onBgClick(e: React.MouseEvent<SVGRectElement>) {
+    if (mmDragRef.current) return
+    const rect = (e.currentTarget.ownerSVGElement as SVGSVGElement).getBoundingClientRect()
     const cx = (e.clientX - rect.left) / mmScale + minX
     const cy = (e.clientY - rect.top)  / mmScale + minY
     onNavigate({ x: containerW / 2 - cx * zoom, y: containerH / 2 - cy * zoom })
@@ -331,20 +333,28 @@ function MiniMap({ nodeDefs, posMap, pan, zoom, containerW, containerH, onNaviga
       background: 'var(--sapTile_Background)', border: '1px solid var(--sapList_BorderColor)',
       borderRadius: 6, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
     }}>
-      <svg width={MM_W} height={MM_H} style={{ cursor: 'crosshair', display: 'block' }} onClick={onClick}>
-        {/* Nodes as tiny rects */}
+      <svg width={MM_W} height={MM_H} style={{ display: 'block' }}
+        onMouseMove={onSvgMouseMove} onMouseUp={onSvgMouseUp} onMouseLeave={onSvgMouseUp}>
+        {/* Clickable background — click to jump */}
+        <rect width={MM_W} height={MM_H} fill="transparent" style={{ cursor: 'crosshair' }} onClick={onBgClick} />
+        {/* Node thumbnails */}
         {nodeDefs.map(n => {
-          const p  = posMap[n.id]
-          if (!p) return null
-          const mm = toMM(p.x, p.y)
+          const p = posMap[n.id]; if (!p) return null
           const isHop = n.kind === 'hop'
-          const w = (isHop ? HOP_W : NODE_W) * mmScale
-          const h = (isHop ? HOP_H : NODE_H) * mmScale
-          return <rect key={n.id} x={mm.x} y={mm.y} width={Math.max(w, 3)} height={Math.max(h, 2)} rx={1} fill={n.color} opacity={0.6} />
+          const mm = { x: (p.x - minX) * mmScale, y: (p.y - minY) * mmScale }
+          return <rect key={n.id} x={mm.x} y={mm.y}
+            width={Math.max((isHop ? HOP_W : NODE_W) * mmScale, 3)}
+            height={Math.max((isHop ? HOP_H : NODE_H) * mmScale, 2)}
+            rx={1} fill={n.color} opacity={0.6} style={{ pointerEvents: 'none' }} />
         })}
-        {/* Viewport indicator */}
-        <rect x={vpMM.x} y={vpMM.y} width={Math.max(vpMM.w, 4)} height={Math.max(vpMM.h, 4)}
-          fill="none" stroke="#0070F2" strokeWidth={1.5} rx={2} opacity={0.7} />
+        {/* Viewport rect — drag to pan */}
+        <rect
+          x={vpMM.x} y={vpMM.y}
+          width={Math.max(vpMM.w, 6)} height={Math.max(vpMM.h, 6)}
+          fill="#0070F210" stroke="#0070F2" strokeWidth={1.5} rx={2}
+          style={{ cursor: 'move' }}
+          onMouseDown={onVpMouseDown}
+        />
       </svg>
     </div>
   )
@@ -547,7 +557,8 @@ export default function GroupDiagramSvg() {
   }
 
   function onBgMouseDown(e: React.MouseEvent) {
-    if (e.target !== e.currentTarget) return
+    // Node mousedowns call stopPropagation so they never reach here.
+    // Edge clicks use onClick not onMouseDown so they don't interfere.
     setContextMenu(null)
     panRef.current = { mx: e.clientX, my: e.clientY, px: pan.x, py: pan.y }
   }
