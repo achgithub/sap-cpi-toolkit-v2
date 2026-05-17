@@ -523,16 +523,20 @@ export default function GroupDiagramSvg() {
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
 
-  const containerRef = useRef<HTMLDivElement>(null)
-  const dragRef = useRef<{ id: string; ox: number; oy: number; mx: number; my: number } | null>(null)
-  const panRef  = useRef<{ mx: number; my: number; px: number; py: number } | null>(null)
-  const posRef  = useRef<Record<string, { x: number; y: number }>>({})
+  const [saveLabel, setSaveLabel] = useState('Save')
+
+  const containerRef  = useRef<HTMLDivElement>(null)
+  const dragRef       = useRef<{ id: string; ox: number; oy: number; mx: number; my: number } | null>(null)
+  const panRef        = useRef<{ mx: number; my: number; px: number; py: number } | null>(null)
+  const posRef        = useRef<Record<string, { x: number; y: number }>>({})
+  const autoFitRef    = useRef(false)  // true = fresh layout, should auto-fit
 
   useEffect(() => { api.load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load saved positions when group changes
   useEffect(() => {
     if (!selectedGroupId) return
+    autoFitRef.current = true  // assume fresh until save data arrives
     setSavedPositions({})
     setPan({ x: 40, y: 40 })
     setZoom(1)
@@ -541,6 +545,7 @@ export default function GroupDiagramSvg() {
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.groupViz?.nodes?.length) {
+          autoFitRef.current = false  // loaded from save — keep user's layout
           const pos: Record<string, { x: number; y: number }> = {}
           for (const n of data.groupViz.nodes) pos[n.id] = { x: n.x, y: n.y }
           setSavedPositions(pos)
@@ -569,10 +574,26 @@ export default function GroupDiagramSvg() {
     [patchedNodeDefs, edges, savedPositions] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
-  // Sync layout to mutable posRef
+  // Sync layout to mutable posRef; auto-fit after fresh (non-saved) layouts
   useEffect(() => {
     posRef.current = calcPositions
     setNodePositions({ ...calcPositions })
+    if (!autoFitRef.current) return
+    autoFitRef.current = false
+    // Defer until after the browser has painted the new positions
+    requestAnimationFrame(() => {
+      const pos  = Object.values(calcPositions)
+      if (!pos.length) return
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const minX = Math.min(...pos.map(p => p.x))
+      const minY = Math.min(...pos.map(p => p.y))
+      const maxX = Math.max(...pos.map(p => p.x)) + NODE_W
+      const maxY = Math.max(...pos.map(p => p.y)) + NODE_H
+      const nz   = Math.max(0.15, Math.min((rect.width - 80) / (maxX - minX), (rect.height - 80) / (maxY - minY), 2))
+      setPan({ x: 40 - minX * nz, y: 40 - minY * nz })
+      setZoom(nz)
+    })
   }, [calcPositions])
 
   // Build edge paths (memoized, re-runs on zoom for label density)
@@ -634,13 +655,18 @@ export default function GroupDiagramSvg() {
     }
   }
 
-  const savePositions = useCallback(() => {
+  const savePositions = useCallback((showFeedback = false) => {
     if (!selectedGroupId) return
     const nodes = Object.entries(posRef.current).map(([id, p]) => ({ id, x: p.x, y: p.y }))
     fetch(`${BASE}/logical-groups/${selectedGroupId}/flow-diagram`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ groupViz: { nodes } }),
+    }).then(() => {
+      if (showFeedback) {
+        setSaveLabel('Saved ✓')
+        setTimeout(() => setSaveLabel('Save'), 1500)
+      }
     }).catch(() => {})
   }, [selectedGroupId])
 
@@ -722,6 +748,7 @@ export default function GroupDiagramSvg() {
               <button style={toolBtn} onClick={fit}>⤢ Fit</button>
               <button style={toolBtn} onClick={() => adjustZoom(1.2)}>＋</button>
               <button style={toolBtn} onClick={() => adjustZoom(0.833)}>－</button>
+              <button style={toolBtn} onClick={() => savePositions(true)}>{saveLabel}</button>
               <button style={toolBtn} onClick={() => { setSavedPositions({}) }}>↺ Reset</button>
             </div>
 
