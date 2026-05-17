@@ -93,24 +93,24 @@ function buildGraph(
     if (!iface.sender_system_id) continue
     const ref = iface.ref?.trim() || iface.name
 
-    // Shared via chain — built ONCE per interface (not per receiver)
+    // Shared via chain — routing arrows only, NO label (ref shown once on receiver leg)
     let sharedEnd = iface.sender_system_id
     for (let vi = 0; vi < iface.via.length; vi++) {
       const hop   = iface.via[vi]
       const hopId = hop.system_id ?? ensureHop(hop.label, '#6B7280')
       if (hop.system_id) ensureSys(hop.system_id, '#6B7280', hop.label)
-      edges.push({ id: `${iface.id}-via-${vi}`, fromId: sharedEnd, toId: hopId, ref, color: edgeColor, ifaceId: iface.id, receiverId: '' })
+      edges.push({ id: `${iface.id}-via-${vi}`, fromId: sharedEnd, toId: hopId, ref: '', color: edgeColor, ifaceId: iface.id, receiverId: '' })
       sharedEnd = hopId
     }
 
-    // Per-receiver legs branch from the end of the shared chain
+    // Per-receiver legs — carry the ref label (one label per interface)
     for (const recv of iface.receivers) {
       let prevId = sharedEnd
       for (let hi = 0; hi < recv.via.length; hi++) {
         const hop   = recv.via[hi]
         const hopId = hop.system_id ?? ensureHop(hop.label, '#6B7280')
         if (hop.system_id) ensureSys(hop.system_id, '#6B7280', hop.label)
-        edges.push({ id: `${iface.id}-recvvia-${recv.id}-${hi}`, fromId: prevId, toId: hopId, ref, color: edgeColor, ifaceId: iface.id, receiverId: recv.id })
+        edges.push({ id: `${iface.id}-recvvia-${recv.id}-${hi}`, fromId: prevId, toId: hopId, ref: '', color: edgeColor, ifaceId: iface.id, receiverId: recv.id })
         prevId = hopId
       }
       if (recv.system_id) {
@@ -227,6 +227,9 @@ function buildEdgePaths(
 
   for (const group of groups.values()) {
     const n = group.length
+    // Label position index counts only labelled edges so routing-only edges
+    // don't consume a slot and leave gaps in the 5-position cycle
+    let labelIdx = 0
     for (let i = 0; i < n; i++) {
       const e    = group[i]
       const from = posMap[e.fromId]
@@ -268,12 +271,14 @@ function buildEdgePaths(
       // and the cycle repeats every 5, so same-position labels are always
       // one arc apart — evenly distributed for both vertical and horizontal.
       const LABEL_T = [0.1, 0.3, 0.5, 0.7, 0.9]
-      const t  = LABEL_T[i % LABEL_T.length]
+      const t  = LABEL_T[labelIdx % LABEL_T.length]
       const lx = (1-t)*(1-t)*p1.x + 2*t*(1-t)*mx + t*t*p2.x
       const ly = (1-t)*(1-t)*p1.y + 2*t*(1-t)*my + t*t*p2.y
 
       const screenDist = len * zoom
-      const ref = screenDist >= MIN_LABEL_PX ? e.ref : '…'
+      // Empty ref = routing-only edge (shared via hop), no label pill
+      const ref = !e.ref ? '' : screenDist >= MIN_LABEL_PX ? e.ref : '…'
+      if (e.ref) labelIdx++  // only advance the label slot counter for labelled edges
 
       paths.push({ id: e.id, ref, color: e.color, d, lx, ly, ifaceId: e.ifaceId, receiverId: e.receiverId })
     }
@@ -785,8 +790,8 @@ export default function GroupDiagramSvg() {
                     )
                   })}
 
-                  {/* Pass 3: edge labels — always on top */}
-                  {edgePaths.map(ep => {
+                  {/* Pass 3: edge labels — always on top (skip routing-only edges) */}
+                  {edgePaths.filter(ep => ep.ref).map(ep => {
                     const PW = 54 / zoom, PH = 16 / zoom, FS = 9 / zoom
                     return (
                       <g key={`lbl-${ep.id}`} style={{ pointerEvents: 'none' }}>
