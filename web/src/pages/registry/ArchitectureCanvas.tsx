@@ -166,8 +166,8 @@ interface Popup {
 
 // ── EdgeRefLabels ─────────────────────────────────────────────────────────────
 
-const LABEL_W  = 52   // approx px width of a 10-char ref label at font-size 10
-const LABEL_GAP = 6   // min gap between labels
+const LABEL_W   = 56   // approx px width of a ref label pill at font-size 10
+const MIN_STEP  = 90   // minimum centre-to-centre spacing in screen px before falling back
 
 function EdgeRefLabels({ pts, refs, color, scale }: {
   pts: Point[]; refs: string[]; color: string; scale: number
@@ -178,15 +178,16 @@ function EdgeRefLabels({ pts, refs, color, scale }: {
   const segs = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y))
   const total = segs.reduce((s, l) => s + l, 0)
 
-  // How many labels fit on screen at current zoom?
-  const slotPx   = (LABEL_W + LABEL_GAP) / scale   // slot width in canvas units
-  const maxFit   = Math.max(1, Math.floor(total / slotPx))
+  // How many labels genuinely fit with comfortable spacing?
+  // MIN_STEP is in screen px, convert to canvas units for comparison
+  const minStepCanvas = MIN_STEP / scale
+  const maxFit = Math.max(1, Math.floor((total - minStepCanvas) / minStepCanvas))
   const visible  = refs.slice(0, maxFit)
   const overflow = refs.length > visible.length
 
-  // Evenly space the visible labels along the path
-  const count  = visible.length + (overflow ? 1 : 0)
-  const step   = total / (count + 1)
+  // Evenly space the visible labels + optional overflow indicator
+  const count = visible.length + (overflow ? 1 : 0)
+  const step  = total / (count + 1)
 
   const labels: Array<{ x: number; y: number; text: string }> = []
 
