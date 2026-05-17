@@ -16,7 +16,7 @@ async function checkOk(res: Response): Promise<void> {
 const DEFAULT_CONFIG: RegistryConfig = {
   systemTypes: [{ name: 'Custom', color: '#78909C' }],
   infraTypes:  [{ name: 'On-Prem', category: 'on_prem' }],
-  platforms:   [{ name: 'SAP Integration Suite' }],
+  platforms:   [{ name: 'SAP Integration Suite', color: '#E65100' }],
 }
 
 export interface DiagramFilter {
@@ -47,20 +47,21 @@ export function useRegistryApi() {
     setLoading(true)
     setError('')
     try {
-      const [sRes, gRes, iRes, stRes, itRes] = await Promise.all([
+      const [sRes, gRes, iRes, stRes, itRes, ipRes] = await Promise.all([
         fetch(`${BASE}/systems`),
         fetch(`${BASE}/logical-groups`),
         fetch(`${BASE}/interfaces`),
         fetch(`${BASE}/config/system_types`),
         fetch(`${BASE}/config/infra_types`),
+        fetch(`${BASE}/config/integration_platforms`),
       ])
-      const [s, g, i, st, it] = await Promise.all([
-        sRes.json(), gRes.json(), iRes.json(), stRes.json(), itRes.json(),
+      const [s, g, i, st, it, ip] = await Promise.all([
+        sRes.json(), gRes.json(), iRes.json(), stRes.json(), itRes.json(), ipRes.json(),
       ])
       setSystems(s as System[])
       setLogicalGroups(g as LogicalGroup[])
       setInterfaces(i as Interface[])
-      setConfig(c => ({ ...c, systemTypes: st, infraTypes: it }))
+      setConfig(c => ({ ...c, systemTypes: st, infraTypes: it, platforms: (ip as {name:string;color?:string}[]).map(p => ({ ...p, color: p.color ?? '#E65100' })) }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {

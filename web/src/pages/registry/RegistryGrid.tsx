@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRegistryApi } from './useRegistryApi'
-import type { Interface, Receiver, System, ViaHop } from './types'
+import type { Interface, Receiver, System, ViaHop, PlatformConfig } from './types'
 import { STATUS_COLORS, TYPE_LABELS, STATUSES, INTERFACE_TYPES, TRANSPORTS, AUTH_TYPES } from './types'
 
 interface Props {
@@ -36,13 +36,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-function ViaEditor({ value, onChange }: { value: ViaHop[]; onChange: (v: ViaHop[]) => void }) {
+function ViaEditor({ value, onChange, platforms = [] }: { value: ViaHop[]; onChange: (v: ViaHop[]) => void; platforms?: PlatformConfig[] }) {
   const [input, setInput] = useState('')
 
-  function add() {
-    const label = input.trim()
-    if (!label) return
-    onChange([...value, { label }])
+  function add(label: string) {
+    const l = label.trim()
+    if (!l) return
+    onChange([...value, { label: l }])
     setInput('')
   }
 
@@ -51,35 +51,53 @@ function ViaEditor({ value, onChange }: { value: ViaHop[]; onChange: (v: ViaHop[
       {/* Hop tags */}
       {value.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-          {value.map((hop, i) => (
-            <span key={i} style={{
-              display: 'inline-flex', alignItems: 'center', gap: '4px',
-              padding: '2px 8px', borderRadius: '12px',
-              background: 'var(--sapHighlightColor)', color: '#fff',
-              fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem',
-            }}>
-              {i > 0 && <span style={{ opacity: 0.7, marginRight: 2 }}>→</span>}
-              {hop.label}
-              <button
-                type="button"
-                onClick={() => onChange(value.filter((_, idx) => idx !== i))}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fff', padding: 0, fontSize: '0.75rem', lineHeight: 1, opacity: 0.8 }}
-              >×</button>
-            </span>
-          ))}
+          {value.map((hop, i) => {
+            const color = platforms.find(p => p.name === hop.label)?.color
+            return (
+              <span key={i} style={{
+                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                padding: '2px 8px', borderRadius: '12px',
+                background: color ?? 'var(--sapHighlightColor)', color: '#fff',
+                fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem',
+              }}>
+                {i > 0 && <span style={{ opacity: 0.7, marginRight: 2 }}>→</span>}
+                {hop.label}
+                <button
+                  type="button"
+                  onClick={() => onChange(value.filter((_, idx) => idx !== i))}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fff', padding: 0, fontSize: '0.75rem', lineHeight: 1, opacity: 0.8 }}
+                >×</button>
+              </span>
+            )
+          })}
         </div>
       )}
-      {/* Input */}
+      {/* Input: dropdown if platforms configured, else free text */}
       <div style={{ display: 'flex', gap: '4px' }}>
-        <input
-          style={{ ...fieldStyle, flex: 1 }}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
-          placeholder="e.g. SAP CPI — press Enter to add"
-        />
-        {input.trim() && (
-          <button type="button" style={{ ...btnStyle('default'), flexShrink: 0 }} onClick={add}>Add</button>
+        {platforms.length > 0 ? (
+          <select
+            style={{ ...fieldStyle, flex: 1 }}
+            value=""
+            onChange={e => { if (e.target.value) add(e.target.value) }}
+          >
+            <option value="">— add platform —</option>
+            {platforms.map(p => (
+              <option key={p.name} value={p.name}>{p.name}</option>
+            ))}
+          </select>
+        ) : (
+          <>
+            <input
+              style={{ ...fieldStyle, flex: 1 }}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(input) } }}
+              placeholder="e.g. SAP CPI — press Enter to add"
+            />
+            {input.trim() && (
+              <button type="button" style={{ ...btnStyle('default'), flexShrink: 0 }} onClick={() => add(input)}>Add</button>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -272,7 +290,7 @@ function InterfaceForm({
       </Field>
 
       <Field label="Via (shared hops for all receivers)">
-        <ViaEditor value={form.via} onChange={via => setForm(f => ({ ...f, via }))} />
+        <ViaEditor value={form.via} onChange={via => setForm(f => ({ ...f, via }))} platforms={api.config.platforms} />
         <div style={{ fontSize: '0.7rem', color: 'var(--sapContent_LabelColor)', marginTop: '2px' }}>
           e.g. SAP CPI → SFTP Server. Add per-receiver hops on the Receivers tab.
         </div>
@@ -296,10 +314,11 @@ function InterfaceForm({
 // ── Receiver row (in detail panel) ────────────────────────────────────────────
 
 function ReceiverRow({
-  rec, systems, onUpdate, onDelete,
+  rec, systems, platforms, onUpdate, onDelete,
 }: {
   rec:      Receiver
   systems:  System[]
+  platforms: PlatformConfig[]
   onUpdate: (body: Partial<Receiver>) => Promise<unknown>
   onDelete: () => Promise<void>
 }) {
@@ -328,7 +347,7 @@ function ReceiverRow({
         </div>
         <input style={F} value={form.credential_alias} onChange={e => setForm(f => ({ ...f, credential_alias: e.target.value }))} placeholder="Credential alias" />
         <div style={{ fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)', marginTop: '2px' }}>Via (pre-receiver hops, if different from interface)</div>
-        <ViaEditor value={form.via} onChange={via => setForm(f => ({ ...f, via }))} />
+        <ViaEditor value={form.via} onChange={via => setForm(f => ({ ...f, via }))} platforms={platforms} />
         <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
           <button style={btnStyle('default')} onClick={() => setEditing(false)}>Cancel</button>
           <button style={btnStyle('primary')} onClick={async () => { await onUpdate({ ...form, system_id: form.system_id || null }); setEditing(false) }}>Save</button>
@@ -445,6 +464,7 @@ function DetailPanel({
               key={rec.id}
               rec={rec}
               systems={systems}
+              platforms={api.config.platforms}
               onUpdate={body => api.updateReceiver(iface.id, rec.id, body)}
               onDelete={() => api.deleteReceiver(iface.id, rec.id)}
             />
@@ -469,7 +489,7 @@ function DetailPanel({
               </div>
               <input style={F} value={newRecv.credential_alias} onChange={e => setNewRecv(r => ({ ...r, credential_alias: e.target.value }))} placeholder="Credential alias" />
               <div style={{ fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)' }}>Via (pre-receiver hops)</div>
-              <ViaEditor value={newRecv.via} onChange={via => setNewRecv(r => ({ ...r, via }))} />
+              <ViaEditor value={newRecv.via} onChange={via => setNewRecv(r => ({ ...r, via }))} platforms={api.config.platforms} />
               <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                 <button style={btnStyle('default')} onClick={() => { setAddRecv(false); setNewRecv({ system_id: '', transport: '', auth_type: '', credential_alias: '', via: [] }) }}>Cancel</button>
                 <button style={btnStyle('primary')} onClick={async () => {

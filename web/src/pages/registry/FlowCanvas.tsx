@@ -5,6 +5,17 @@ import { Button } from '@ui5/webcomponents-react'
 
 export type FlowNodeType = 'system' | 'hop' | 'step' | 'text' | 'boundary'
 
+export interface FlowStep {
+  id: string
+  num: number
+  text: string
+  notes: string
+  ifaceRef?: string
+  ifaceColor?: string
+}
+
+export const STEP_ROW_H = 26
+
 export interface FlowNode {
   id: string
   type: FlowNodeType
@@ -15,6 +26,8 @@ export interface FlowNode {
   height: number
   color: string
   fontSize: number
+  steps?: FlowStep[]
+  nodeKey?: string
 }
 
 export interface FlowEdge {
@@ -36,8 +49,8 @@ export interface FlowDiagramState {
 const GRID = 10
 
 export const FLOW_DEFAULTS: Record<FlowNodeType, { w: number; h: number; color: string; fs: number }> = {
-  system:   { w: 200, h: 340, color: '#1565C0', fs: 15 },
-  hop:      { w: 100, h: 220, color: '#E65100', fs: 13 },
+  system:   { w: 160, h: 80,  color: '#1565C0', fs: 13 },
+  hop:      { w: 160, h: 80,  color: '#E65100', fs: 13 },
   step:     { w: 160, h: 44,  color: '#880E4F', fs: 12 },
   text:     { w: 120, h: 28,  color: '#222222', fs: 14 },
   boundary: { w: 2,   h: 800, color: '#777777', fs: 12 },
@@ -92,6 +105,9 @@ const DIR_STYLE: Record<ResizeDir, React.CSSProperties> = {
 
 // ── NodeBox ───────────────────────────────────────────────────────────────────
 
+const HEADER_H = 36
+const ADD_STEP_H = 24
+
 interface NodeBoxProps {
   node: FlowNode
   selected: boolean
@@ -100,10 +116,13 @@ interface NodeBoxProps {
   onDoubleClick: () => void
   onLabelSave: (label: string) => void
   onResizeMouseDown: (e: React.MouseEvent, dir: ResizeDir) => void
+  onStepsChange: (steps: FlowStep[]) => void
 }
 
-function NodeBox({ node, selected, editing, onMouseDown, onDoubleClick, onLabelSave, onResizeMouseDown }: NodeBoxProps) {
+function NodeBox({ node, selected, editing, onMouseDown, onDoubleClick, onLabelSave, onResizeMouseDown, onStepsChange }: NodeBoxProps) {
   const [draft, setDraft] = useState(node.label)
+  const [editingStep, setEditingStep] = useState<string | null>(null)
+  const [stepDraft, setStepDraft] = useState('')
   useEffect(() => { setDraft(node.label) }, [node.label])
 
   // ── Boundary (vertical dashed line) ──────────────────────────────────────
@@ -167,56 +186,147 @@ function NodeBox({ node, selected, editing, onMouseDown, onDoubleClick, onLabelS
     )
   }
 
-  // ── System / Hop / Step ───────────────────────────────────────────────────
+  // ── Step (standalone step node) ──────────────────────────────────────────
 
-  const radius = node.type === 'system' ? 12 : node.type === 'hop' ? 50 : 6
-  // System boxes are more transparent so content inside shows
-  const bg = node.type === 'system' ? node.color + 'CC' : node.color
+  if (node.type === 'step') {
+    return (
+      <div
+        style={{
+          position: 'absolute', left: node.x, top: node.y, width: node.width, height: node.height,
+          background: node.color,
+          border: selected ? '2px solid #0070F2' : '2px solid rgba(0,0,0,0.15)',
+          borderRadius: 6, cursor: 'move', userSelect: 'none', boxSizing: 'border-box',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '4px 8px', overflow: 'hidden',
+        }}
+        onMouseDown={onMouseDown}
+        onDoubleClick={onDoubleClick}
+      >
+        {editing
+          ? <input autoFocus value={draft} onChange={e => setDraft(e.target.value)}
+              onBlur={() => onLabelSave(draft)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onLabelSave(draft) } }}
+              style={{ fontSize: node.fontSize, border: 'none', background: 'transparent', outline: 'none', color: 'white', fontFamily: 'var(--sapFontFamily)', width: '100%', textAlign: 'center' }} />
+          : <span style={{ fontSize: node.fontSize, fontFamily: 'var(--sapFontFamily)', color: 'white', textAlign: 'center' }}>{node.label}</span>
+        }
+        {selected && RESIZE_DIRS.map(dir => (
+          <div key={dir} style={{ position: 'absolute', width: 8, height: 8, background: 'white', border: '1.5px solid #0070F2', borderRadius: 2, zIndex: 10, ...DIR_STYLE[dir] }}
+            onMouseDown={e => { e.stopPropagation(); onResizeMouseDown(e, dir) }} />
+        ))}
+      </div>
+    )
+  }
+
+  // ── System / Hop (card style with inline steps) ───────────────────────────
+
+  const steps = node.steps ?? []
+  const minH = HEADER_H + steps.length * STEP_ROW_H + (selected ? ADD_STEP_H : 0)
+  const boxH = Math.max(node.height, minH)
+  const radius = node.type === 'hop' ? 8 : 4
+
+  function addStep(e: React.MouseEvent) {
+    e.stopPropagation()
+    const newStep: FlowStep = { id: flowUid(), num: steps.length + 1, text: 'Step', notes: '' }
+    const updated = [...steps, newStep]
+    onStepsChange(updated)
+    setEditingStep(newStep.id)
+    setStepDraft(newStep.text)
+  }
+
+  function deleteStep(e: React.MouseEvent, stepId: string) {
+    e.stopPropagation()
+    const updated = steps.filter(s => s.id !== stepId).map((s, i) => ({ ...s, num: i + 1 }))
+    onStepsChange(updated)
+  }
+
+  function startEditStep(e: React.MouseEvent, step: FlowStep) {
+    e.stopPropagation()
+    setEditingStep(step.id)
+    setStepDraft(step.text)
+  }
+
+  function saveStep(stepId: string) {
+    const updated = steps.map(s => s.id === stepId ? { ...s, text: stepDraft } : s)
+    onStepsChange(updated)
+    setEditingStep(null)
+  }
 
   return (
     <div
       style={{
-        position: 'absolute', left: node.x, top: node.y, width: node.width, height: node.height,
-        background: bg,
-        border: selected ? '2px solid #0070F2' : '2px solid rgba(0,0,0,0.15)',
+        position: 'absolute', left: node.x, top: node.y, width: node.width, height: boxH,
+        border: selected ? '2px solid #0070F2' : '1.5px solid rgba(0,0,0,0.18)',
         borderRadius: radius, cursor: 'move', userSelect: 'none', boxSizing: 'border-box',
-        display: 'flex',
-        alignItems: node.type === 'system' ? 'flex-start' : 'center',
-        justifyContent: 'center',
-        padding: node.type === 'system' ? '10px 10px' : '4px 8px',
-        overflow: 'hidden',
+        overflow: 'hidden', background: '#fff',
+        boxShadow: selected ? '0 0 0 2px #0070F240' : '0 1px 4px rgba(0,0,0,0.12)',
       }}
       onMouseDown={onMouseDown}
-      onDoubleClick={onDoubleClick}
     >
-      {editing
-        ? <textarea autoFocus value={draft} onChange={e => setDraft(e.target.value)}
-            onBlur={() => onLabelSave(draft)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onLabelSave(draft) } }}
-            style={{
-              fontSize: node.fontSize, border: 'none', background: 'transparent', outline: 'none',
-              color: 'white', fontFamily: 'var(--sapFontFamily)', fontWeight: node.type === 'system' ? 'bold' : 500,
-              resize: 'none', width: '100%', textAlign: node.type === 'system' ? 'left' : 'center',
-            }} />
-        : <span style={{
-            fontSize: node.fontSize, fontFamily: 'var(--sapFontFamily)', color: 'white',
-            fontWeight: node.type === 'system' ? 'bold' : 500,
-            textAlign: node.type === 'system' ? 'left' : 'center',
-            wordBreak: 'break-word', whiteSpace: 'pre-wrap',
-          }}>{node.label}</span>
-      }
+      {/* Colored header bar */}
+      <div
+        style={{
+          background: node.color, height: HEADER_H, display: 'flex', alignItems: 'center',
+          padding: '0 8px', cursor: 'move',
+        }}
+        onDoubleClick={onDoubleClick}
+      >
+        {editing
+          ? <input autoFocus value={draft} onChange={e => setDraft(e.target.value)}
+              onBlur={() => onLabelSave(draft)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onLabelSave(draft) } }}
+              style={{ fontSize: node.fontSize, border: 'none', background: 'transparent', outline: 'none', color: 'white', fontFamily: 'var(--sapFontFamily)', fontWeight: 'bold', width: '100%' }} />
+          : <span style={{ fontSize: node.fontSize, fontFamily: 'var(--sapFontFamily)', color: 'white', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.label}</span>
+        }
+      </div>
+
+      {/* Step rows */}
+      {steps.map(step => (
+        <div key={step.id}
+          style={{
+            height: STEP_ROW_H, display: 'flex', alignItems: 'center',
+            borderBottom: '1px solid #eee', padding: '0 6px', gap: 4,
+            background: step.ifaceColor ? step.ifaceColor + '18' : 'transparent',
+          }}
+        >
+          <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: step.ifaceColor ?? node.color, fontWeight: 'bold', minWidth: 16, textAlign: 'center', flexShrink: 0 }}>
+            {step.num}
+          </span>
+          {editingStep === step.id
+            ? <input autoFocus value={stepDraft} onChange={e => setStepDraft(e.target.value)}
+                onBlur={() => saveStep(step.id)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveStep(step.id) } }}
+                onClick={e => e.stopPropagation()}
+                style={{ flex: 1, fontSize: '0.72rem', border: 'none', outline: '1px solid #0070F2', fontFamily: 'var(--sapFontFamily)', borderRadius: 2, padding: '1px 4px' }} />
+            : <span
+                style={{ flex: 1, fontSize: '0.72rem', fontFamily: 'var(--sapFontFamily)', color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text' }}
+                onDoubleClick={e => startEditStep(e, step)}
+              >{step.text}</span>
+          }
+          {step.ifaceRef && (
+            <span style={{ fontFamily: 'monospace', fontSize: '0.65rem', color: step.ifaceColor ?? '#777', border: `1px solid ${step.ifaceColor ?? '#ccc'}`, borderRadius: 3, padding: '0 3px', flexShrink: 0 }}>
+              {step.ifaceRef}
+            </span>
+          )}
+          {selected && !step.ifaceRef && (
+            <button onClick={e => deleteStep(e, step.id)}
+              style={{ fontSize: '0.7rem', lineHeight: 1, padding: '0 3px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#999', flexShrink: 0 }}>×</button>
+          )}
+        </div>
+      ))}
+
+      {/* Add step row */}
+      {selected && (
+        <div style={{ height: ADD_STEP_H, display: 'flex', alignItems: 'center', padding: '0 8px' }}>
+          <button onClick={addStep}
+            style={{ fontSize: '0.72rem', color: node.color, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'var(--sapFontFamily)' }}>
+            + Step
+          </button>
+        </div>
+      )}
 
       {selected && RESIZE_DIRS.map(dir => (
-        <div
-          key={dir}
-          style={{
-            position: 'absolute', width: 8, height: 8,
-            background: 'white', border: '1.5px solid #0070F2', borderRadius: 2,
-            zIndex: 10,
-            ...DIR_STYLE[dir],
-          }}
-          onMouseDown={e => { e.stopPropagation(); onResizeMouseDown(e, dir) }}
-        />
+        <div key={dir} style={{ position: 'absolute', width: 8, height: 8, background: 'white', border: '1.5px solid #0070F2', borderRadius: 2, zIndex: 10, ...DIR_STYLE[dir] }}
+          onMouseDown={e => { e.stopPropagation(); onResizeMouseDown(e, dir) }} />
       ))}
     </div>
   )
@@ -698,6 +808,7 @@ export default function FlowCanvas({ initialState, onSave, onReseed, saving = fa
               onDoubleClick={() => setEditing(node.id)}
               onLabelSave={label => { setNodes(ns => ns.map(n => n.id !== node.id ? n : { ...n, label })); setEditing(null) }}
               onResizeMouseDown={(e, dir) => onResizeMouseDown(e, node.id, dir)}
+              onStepsChange={steps => setNodes(ns => ns.map(n => n.id !== node.id ? n : { ...n, steps }))}
             />
           ))}
 

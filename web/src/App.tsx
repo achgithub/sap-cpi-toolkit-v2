@@ -94,38 +94,15 @@ export default function App() {
       </ShellBar>
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
-      {/* Sub-header: project context placeholder + Toolbox trigger */}
-      <FlexBox
-        style={{
-          padding: '0.375rem 1rem',
-          gap: '0.75rem',
-          borderBottom: '1px solid var(--sapList_BorderColor)',
-          background: 'var(--sapGroup_TitleBackground)',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          minHeight: '2.25rem',
-        }}
-      >
-        <ContextBar />
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <ClipboardBadge onClick={() => setToolboxOpen(true)} />
-          <Button
-            icon="wrench"
-            design="Transparent"
-            onClick={() => setToolboxOpen(true)}
-          >
-            Toolbox
-          </Button>
-        </div>
-      </FlexBox>
-
-      {/* Tab bar */}
+      {/* Tab bar + context bar merged */}
       <div style={{
         display: 'flex',
+        alignItems: 'stretch',
         borderBottom: '2px solid var(--sapList_BorderColor)',
         background: 'var(--sapGroup_TitleBackground)',
         padding: '0 1rem',
         flexShrink: 0,
+        gap: '0',
       }}>
         {(['design', 'develop', 'test', 'monitoring'] as Phase[]).map(p => (
           <button
@@ -147,6 +124,19 @@ export default function App() {
             {p.charAt(0).toUpperCase() + p.slice(1)}
           </button>
         ))}
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0' }}>
+          <ContextBar />
+          <div style={{ width: 1, height: '1.25rem', background: 'var(--sapList_BorderColor)' }} />
+          <ClipboardBadge onClick={() => setToolboxOpen(true)} />
+          <Button
+            icon="wrench"
+            design="Transparent"
+            onClick={() => setToolboxOpen(true)}
+          >
+            Toolbox
+          </Button>
+        </div>
       </div>
 
       {/* Phase content */}

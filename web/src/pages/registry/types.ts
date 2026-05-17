@@ -71,7 +71,7 @@ export interface DiagramEdge {
 
 export interface SystemTypeConfig { name: string; color: string }
 export interface InfraTypeConfig  { name: string; category: 'cloud' | 'on_prem' | 'hybrid' }
-export interface PlatformConfig   { name: string }
+export interface PlatformConfig   { name: string; color: string }
 
 export interface RegistryConfig {
   systemTypes:  SystemTypeConfig[]

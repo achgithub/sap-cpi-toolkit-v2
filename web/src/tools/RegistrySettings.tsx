@@ -196,14 +196,16 @@ function InfraTypeEditor() {
 // ── Integration Platforms ─────────────────────────────────────────────────────
 
 function PlatformEditor() {
-  const [items,    setItems]    = useState<PlatformConfig[]>([])
-  const [editIdx,  setEditIdx]  = useState<number | null>(null)
-  const [editName, setEditName] = useState('')
-  const [newName,  setNewName]  = useState('')
-  const [saving,   setSaving]   = useState(false)
-  const [error,    setError]    = useState('')
+  const [items,     setItems]     = useState<PlatformConfig[]>([])
+  const [editIdx,   setEditIdx]   = useState<number | null>(null)
+  const [editName,  setEditName]  = useState('')
+  const [editColor, setEditColor] = useState('#E65100')
+  const [newName,   setNewName]   = useState('')
+  const [newColor,  setNewColor]  = useState('#E65100')
+  const [saving,    setSaving]    = useState(false)
+  const [error,     setError]     = useState('')
 
-  useEffect(() => { fetch(`${BASE}/integration_platforms`).then(r => r.json()).then(setItems).catch(() => {}) }, [])
+  useEffect(() => { fetch(`${BASE}/integration_platforms`).then(r => r.json()).then((d: PlatformConfig[]) => setItems(d.map(p => ({ ...p, color: p.color ?? '#E65100' })))).catch(() => {}) }, [])
 
   async function save(updated: PlatformConfig[]) {
     setSaving(true); setError('')
@@ -215,11 +217,11 @@ function PlatformEditor() {
     finally { setSaving(false) }
   }
 
-  function startEdit(i: number) { setEditIdx(i); setEditName(items[i].name) }
+  function startEdit(i: number) { setEditIdx(i); setEditName(items[i].name); setEditColor(items[i].color ?? '#E65100') }
 
   function commitEdit(i: number) {
     if (!editName.trim()) { setEditIdx(null); return }
-    save(items.map((x, j) => j === i ? { name: editName.trim() } : x))
+    save(items.map((x, j) => j === i ? { name: editName.trim(), color: editColor } : x))
     setEditIdx(null)
   }
 
@@ -231,12 +233,15 @@ function PlatformEditor() {
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0', borderBottom: '1px solid var(--sapList_BorderColor)' }}>
           {editIdx === i ? (
             <>
+              <input type="color" value={editColor} onChange={e => setEditColor(e.target.value)}
+                style={{ width: 28, height: 28, border: 'none', padding: 0, cursor: 'pointer', borderRadius: 4, flexShrink: 0 }} />
               <Input value={editName} onInput={e => setEditName((e.target as unknown as HTMLInputElement).value)} style={{ flex: 1 }} />
               <Button design="Transparent" icon="accept" onClick={() => commitEdit(i)} disabled={saving} />
               <Button design="Transparent" icon="decline" onClick={() => setEditIdx(null)} />
             </>
           ) : (
             <>
+              <div style={{ width: 14, height: 14, borderRadius: 3, background: item.color ?? '#E65100', border: '1px solid rgba(0,0,0,0.15)', flexShrink: 0 }} />
               <span style={{ flex: 1, fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapTextColor)' }}>{item.name}</span>
               <Button design="Transparent" icon="edit" onClick={() => startEdit(i)} />
               <Button design="Transparent" icon="delete" onClick={() => save(items.filter((_, j) => j !== i))} />
@@ -248,10 +253,12 @@ function PlatformEditor() {
       <div style={{ paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
         <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)' }}>Add new</div>
         <div style={{ display: 'flex', gap: '6px' }}>
+          <input type="color" value={newColor} onChange={e => setNewColor(e.target.value)}
+            style={{ width: 28, height: 28, border: 'none', padding: 0, cursor: 'pointer', borderRadius: 4, flexShrink: 0 }} />
           <Input placeholder="Platform name (e.g. SAP CPI)" value={newName} onInput={e => setNewName((e.target as unknown as HTMLInputElement).value)} style={{ flex: 1 }} />
           <Button design="Emphasized" onClick={() => {
             if (!newName.trim()) return
-            save([...items, { name: newName.trim() }])
+            save([...items, { name: newName.trim(), color: newColor }])
             setNewName('')
           }} disabled={saving || !newName.trim()}>Add</Button>
         </div>
