@@ -149,7 +149,6 @@ function radialLayout(
 
   // Ring 1: direct neighbours of hub
   const ring1 = sorted.filter(n => n.id !== sorted[0].id && (adj.get(sorted[0].id)?.has(n.id) ?? false))
-  const remaining = sorted.filter(n => n.id !== sorted[0].id && !ring1.find(r => r.id === n.id))
 
   const placeRing = (items: NodeDef[], r: number, baseAngle = -Math.PI / 2) => {
     items.forEach((n, i) => {
