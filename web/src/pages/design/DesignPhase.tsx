@@ -12,8 +12,7 @@ import ArchitectureView from '../registry/ArchitectureView'
 import RegistryGrid from '../registry/RegistryGrid'
 import SystemView from '../registry/SystemView'
 import FlowDiagram from '../registry/FlowDiagram'
-import GroupDiagramCyto from '../registry/GroupDiagramCyto'
-import GroupDiagramSvg  from '../registry/GroupDiagramSvg'
+import GroupDiagramSvg from '../registry/GroupDiagramSvg'
 
 interface ProjectForm { name: string; description: string }
 const emptyForm = (): ProjectForm => ({ name: '', description: '' })
@@ -215,29 +214,6 @@ function TemplatesSection() {
   )
 }
 
-function GroupPocSwitcher() {
-  const [poc, setPoc] = useState<'cyto' | 'svg'>('cyto')
-  const btnBase: React.CSSProperties = {
-    padding: '3px 12px', fontSize: '0.75rem', borderRadius: 4, cursor: 'pointer',
-    fontFamily: 'var(--sapFontFamily)',
-  }
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', gap: 6, padding: '6px 10px', borderBottom: '1px solid var(--sapList_BorderColor)', background: 'var(--sapGroup_TitleBackground)', flexShrink: 0, alignItems: 'center' }}>
-        <span style={{ fontSize: '0.75rem', color: 'var(--sapContent_LabelColor)', fontFamily: 'var(--sapFontFamily)', marginRight: 4 }}>POC:</span>
-        <button onClick={() => setPoc('cyto')} style={{ ...btnBase, background: poc === 'cyto' ? '#0070F2' : 'var(--sapButton_Background)', color: poc === 'cyto' ? 'white' : 'var(--sapButton_TextColor)', border: poc === 'cyto' ? '1px solid #0070F2' : '1px solid var(--sapButton_BorderColor)' }}>
-          1 — Cytoscape
-        </button>
-        <button onClick={() => setPoc('svg')} style={{ ...btnBase, background: poc === 'svg' ? '#0070F2' : 'var(--sapButton_Background)', color: poc === 'svg' ? 'white' : 'var(--sapButton_TextColor)', border: poc === 'svg' ? '1px solid #0070F2' : '1px solid var(--sapButton_BorderColor)' }}>
-          2 — Custom SVG
-        </button>
-      </div>
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        {poc === 'cyto' ? <GroupDiagramCyto /> : <GroupDiagramSvg />}
-      </div>
-    </div>
-  )
-}
 
 export default function DesignPhase() {
   const [archFilter,     setArchFilter]     = useState<DiagramFilter>(emptyFilter())
@@ -262,7 +238,7 @@ export default function DesignPhase() {
             />
           )}
           {id === 'flow'  && <FlowDiagram />}
-          {id === 'group' && <GroupPocSwitcher />}
+          {id === 'group' && <GroupDiagramSvg />}
           {id === 'registry' && (
             <RegistryGrid
               key={`${registryFilter.sender ?? ''}-${registryFilter.receiver ?? ''}`}
