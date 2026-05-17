@@ -794,8 +794,16 @@ export default function GroupDiagramSvg() {
                     )
                   })}
 
-                  {/* Pass 3: edge labels — always on top (skip routing-only edges) */}
-                  {edgePaths.filter(ep => ep.ref).map(ep => {
+                  {/* Pass 3: edge labels — always on top (skip routing-only edges, skip off-viewport labels) */}
+                  {(() => {
+                    const cW = containerRect?.width ?? 800
+                    const cH = containerRect?.height ?? 600
+                    const vMinX = -pan.x / zoom, vMaxX = (cW  - pan.x) / zoom
+                    const vMinY = -pan.y / zoom, vMaxY = (cH  - pan.y) / zoom
+                    return edgePaths.filter(ep => ep.ref &&
+                      ep.lx >= vMinX && ep.lx <= vMaxX &&
+                      ep.ly >= vMinY && ep.ly <= vMaxY
+                    ).map(ep => {
                     const PW = 54 / zoom, PH = 16 / zoom, FS = 9 / zoom
                     return (
                       <g key={`lbl-${ep.id}`} style={{ pointerEvents: 'none' }}>
@@ -811,8 +819,8 @@ export default function GroupDiagramSvg() {
                           {ep.ref}
                         </text>
                       </g>
-                    )
-                  })}
+                    )})
+                  })()}
 
                 </g>
               </svg>
