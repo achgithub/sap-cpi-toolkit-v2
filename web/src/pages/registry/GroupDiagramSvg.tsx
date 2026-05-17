@@ -93,28 +93,33 @@ function buildGraph(
     if (!iface.sender_system_id) continue
     const ref = iface.ref?.trim() || iface.name
 
-    // Shared via chain — routing arrows only, NO label (ref shown once on receiver leg)
+    // Label goes on the FIRST edge segment only — subsequent hops are routing arrows.
+    // This ensures each interface ref appears exactly once, on the departure segment.
+    let labeled = false
+    const takeRef = () => { if (labeled) return ''; labeled = true; return ref }
+
+    // Shared via chain
     let sharedEnd = iface.sender_system_id
     for (let vi = 0; vi < iface.via.length; vi++) {
       const hop   = iface.via[vi]
       const hopId = hop.system_id ?? ensureHop(hop.label, '#6B7280')
       if (hop.system_id) ensureSys(hop.system_id, '#6B7280', hop.label)
-      edges.push({ id: `${iface.id}-via-${vi}`, fromId: sharedEnd, toId: hopId, ref: '', color: edgeColor, ifaceId: iface.id, receiverId: '' })
+      edges.push({ id: `${iface.id}-via-${vi}`, fromId: sharedEnd, toId: hopId, ref: takeRef(), color: edgeColor, ifaceId: iface.id, receiverId: '' })
       sharedEnd = hopId
     }
 
-    // Per-receiver legs — carry the ref label (one label per interface)
+    // Per-receiver legs
     for (const recv of iface.receivers) {
       let prevId = sharedEnd
       for (let hi = 0; hi < recv.via.length; hi++) {
         const hop   = recv.via[hi]
         const hopId = hop.system_id ?? ensureHop(hop.label, '#6B7280')
         if (hop.system_id) ensureSys(hop.system_id, '#6B7280', hop.label)
-        edges.push({ id: `${iface.id}-recvvia-${recv.id}-${hi}`, fromId: prevId, toId: hopId, ref: '', color: edgeColor, ifaceId: iface.id, receiverId: recv.id })
+        edges.push({ id: `${iface.id}-recvvia-${recv.id}-${hi}`, fromId: prevId, toId: hopId, ref: takeRef(), color: edgeColor, ifaceId: iface.id, receiverId: recv.id })
         prevId = hopId
       }
       if (recv.system_id) {
-        edges.push({ id: `${iface.id}-${recv.id}`, fromId: prevId, toId: recv.system_id, ref, color: edgeColor, ifaceId: iface.id, receiverId: recv.id })
+        edges.push({ id: `${iface.id}-${recv.id}`, fromId: prevId, toId: recv.system_id, ref: takeRef(), color: edgeColor, ifaceId: iface.id, receiverId: recv.id })
       }
     }
   }
