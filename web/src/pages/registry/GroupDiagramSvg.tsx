@@ -263,9 +263,12 @@ function buildEdgePaths(
 
       const d = `M ${p1.x} ${p1.y} Q ${mx} ${my} ${p2.x} ${p2.y}`
 
-      // Bezier midpoint (t=0.5)
-      const lx = 0.25 * p1.x + 0.5 * mx + 0.25 * p2.x
-      const ly = 0.25 * p1.y + 0.5 * my + 0.25 * p2.y
+      // Stagger label t along the arc (0.2→0.8 across the group).
+      // For vertical node pairs all midpoints land at the same Y; staggering
+      // distributes labels along the path so they don't stack.
+      const t  = n === 1 ? 0.5 : 0.2 + (i / (n - 1)) * 0.6
+      const lx = (1-t)*(1-t)*p1.x + 2*t*(1-t)*mx + t*t*p2.x
+      const ly = (1-t)*(1-t)*p1.y + 2*t*(1-t)*my + t*t*p2.y
 
       const screenDist = len * zoom
       const ref = screenDist >= MIN_LABEL_PX ? e.ref : '…'
