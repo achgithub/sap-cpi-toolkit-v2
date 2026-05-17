@@ -89,28 +89,29 @@ function buildGraph(
       if (r.system_id) { ensureSys(r.system_id, '#888', r.system_id); bump(r.system_id) }
     }
 
-    // Build chain: sender → via hops → receiver
+    if (!iface.sender_system_id) continue
+    const ref = iface.ref?.trim() || iface.name
+
+    // Shared via chain — built ONCE per interface (not per receiver)
+    let sharedEnd = iface.sender_system_id
+    for (let vi = 0; vi < iface.via.length; vi++) {
+      const hop   = iface.via[vi]
+      const hopId = hop.system_id ?? ensureHop(hop.label, '#6B7280')
+      if (hop.system_id) ensureSys(hop.system_id, '#6B7280', hop.label)
+      edges.push({ id: `${iface.id}-via-${vi}`, fromId: sharedEnd, toId: hopId, ref, color: edgeColor, ifaceId: iface.id, receiverId: '' })
+      sharedEnd = hopId
+    }
+
+    // Per-receiver legs branch from the end of the shared chain
     for (const recv of iface.receivers) {
-      if (!iface.sender_system_id) continue
-      const ref = iface.ref?.trim() || iface.name
-
-      // Build hop chain for shared via
-      let prevId = iface.sender_system_id
-      for (const hop of iface.via) {
+      let prevId = sharedEnd
+      for (let hi = 0; hi < recv.via.length; hi++) {
+        const hop   = recv.via[hi]
         const hopId = hop.system_id ?? ensureHop(hop.label, '#6B7280')
         if (hop.system_id) ensureSys(hop.system_id, '#6B7280', hop.label)
-        edges.push({ id: `${iface.id}-sharedvia-${hopId}-${recv.id}`, fromId: prevId, toId: hopId, ref, color: edgeColor, ifaceId: iface.id, receiverId: recv.id })
+        edges.push({ id: `${iface.id}-recvvia-${recv.id}-${hi}`, fromId: prevId, toId: hopId, ref, color: edgeColor, ifaceId: iface.id, receiverId: recv.id })
         prevId = hopId
       }
-
-      // Per-receiver via hops
-      for (const hop of recv.via) {
-        const hopId = hop.system_id ?? ensureHop(hop.label, '#6B7280')
-        if (hop.system_id) ensureSys(hop.system_id, '#6B7280', hop.label)
-        edges.push({ id: `${iface.id}-recvvia-${hopId}-${recv.id}`, fromId: prevId, toId: hopId, ref, color: edgeColor, ifaceId: iface.id, receiverId: recv.id })
-        prevId = hopId
-      }
-
       if (recv.system_id) {
         edges.push({ id: `${iface.id}-${recv.id}`, fromId: prevId, toId: recv.system_id, ref, color: edgeColor, ifaceId: iface.id, receiverId: recv.id })
       }
