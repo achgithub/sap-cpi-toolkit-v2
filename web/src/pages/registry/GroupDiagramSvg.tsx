@@ -262,8 +262,12 @@ function buildEdgePaths(
 
       // Cap step so total spread stays bounded regardless of edge count,
       // and never exceeds 25% of the line length (prevents ballooning on short/vertical edges)
-      const step   = Math.min(OFFSET_STEP, n > 1 ? (MAX_HALF_SPREAD * 2) / (n - 1) : OFFSET_STEP, len * 0.25)
-      const offset = (i - (n - 1) / 2) * step
+      const step     = Math.min(OFFSET_STEP, n > 1 ? (MAX_HALF_SPREAD * 2) / (n - 1) : OFFSET_STEP, len * 0.25)
+      const rawOffset = (i - (n - 1) / 2) * step
+      // Negate offset for arcs going opposite to canonical direction so all arcs
+      // bow in the same perpendicular direction, forming one unified spread instead
+      // of two mirrored bundles (9 one way, 3 the other).
+      const offset   = e.fromId === canonicalFromId ? rawOffset : -rawOffset
 
       // Quadratic bezier control point
       const mx = (fx + tx) / 2 + px * offset
