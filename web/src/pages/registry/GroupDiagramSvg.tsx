@@ -237,6 +237,8 @@ function buildEdgePaths(
     // canonicalFromId is always idA, so t=0.1 means "near idA" for every
     // arc in this group regardless of which direction the arc flows.
     const canonicalFromId = key.split('↔')[0]
+    // Count labeled arcs once so we can space them evenly across 0.1→0.9
+    const totalLabeled = group.reduce((c, e) => c + (e.ref ? 1 : 0), 0)
 
     let labelIdx = 0
     for (let i = 0; i < n; i++) {
@@ -283,12 +285,11 @@ function buildEdgePaths(
       // 3→C, 4→D, 5→E, 6→A … Label from one arc reaches ~4 arcs wide,
       // and the cycle repeats every 5, so same-position labels are always
       // one arc apart — evenly distributed for both vertical and horizontal.
-      const LABEL_T = [0.1, 0.3, 0.5, 0.7, 0.9]
-      const tCanon = LABEL_T[labelIdx % LABEL_T.length]
-      // Flip t for arcs going opposite to canonical direction so every label
-      // slot maps to the same screen position across all arcs in the bundle.
-      // e.g. slot 0 (t=0.1) always lands near canonicalFromId for all 12 arcs.
-      const t  = e.fromId === canonicalFromId ? tCanon : 1 - tCanon
+      // Distribute labels evenly from t=0.1 to t=0.9 across the bundle.
+      // Arc 0 (one edge) → label near canonical-start node; last arc → near canonical-end.
+      // Each arc gets a unique position — no two labels share the same t.
+      const tCanon = totalLabeled <= 1 ? 0.5 : 0.1 + 0.8 * (labelIdx / (totalLabeled - 1))
+      const t      = e.fromId === canonicalFromId ? tCanon : 1 - tCanon
       const lx = (1-t)*p1.x + t*p2.x
       const ly = (1-t)*p1.y + t*p2.y
 
