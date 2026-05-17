@@ -221,6 +221,7 @@ export default function DesignPhase() {
   const [fromArch,       setFromArch]       = useState(false)
   const [flowIfaceId,    setFlowIfaceId]    = useState<string | undefined>(undefined)
   const [fromGroup,      setFromGroup]      = useState(false)
+  const [fromGroupId,    setFromGroupId]    = useState<string | undefined>(undefined)
 
   return (
     <PhaseLayout storageKey="v2-design" items={DESIGN_NAV}>
@@ -247,8 +248,10 @@ export default function DesignPhase() {
           )}
           {id === 'group' && (
             <GroupDiagramSvg
-              onOpenFlowDiagram={(ifaceId) => {
+              initialGroupId={fromGroupId}
+              onOpenFlowDiagram={(ifaceId, groupId) => {
                 setFlowIfaceId(ifaceId)
+                setFromGroupId(groupId)
                 setFromGroup(true)
                 setId('flow')
               }}

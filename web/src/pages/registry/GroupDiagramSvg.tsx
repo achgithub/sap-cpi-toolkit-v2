@@ -47,6 +47,7 @@ interface ContextMenu {
   edgeId: string
   ref: string
   ifaceId: string
+  groupId: string
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -520,7 +521,7 @@ function StepsPanel({ ifaceId, ifaceRef, onClose }: {
 function EdgeContextMenu({ menu, onClose, onShowSteps, onOpenFlowDiagram }: {
   menu: ContextMenu; onClose: () => void
   onShowSteps: (ifaceId: string, ref: string) => void
-  onOpenFlowDiagram?: (ifaceId: string) => void
+  onOpenFlowDiagram?: (ifaceId: string, groupId: string) => void
 }) {
   useEffect(() => {
     const handler = () => onClose()
@@ -573,7 +574,7 @@ function EdgeContextMenu({ menu, onClose, onShowSteps, onOpenFlowDiagram }: {
         {menuItem('Open in Registry',  '📋')}
         {menuItem('Interface Summary', '🔍')}
         {menuItem('Open Flow Diagram', '🗺️',
-          onOpenFlowDiagram ? () => { onClose(); onOpenFlowDiagram(menu.ifaceId) } : undefined)}
+          onOpenFlowDiagram ? () => { onClose(); onOpenFlowDiagram(menu.ifaceId, menu.groupId) } : undefined)}
         {menuItem('Show Steps', '📝', () => { onClose(); onShowSteps(menu.ifaceId, menu.ref) })}
       </div>
     </div>
@@ -614,8 +615,9 @@ function GroupList({ groups, selectedId, onSelect }: {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function GroupDiagramSvg({ onOpenFlowDiagram }: {
-  onOpenFlowDiagram?: (ifaceId: string) => void
+export default function GroupDiagramSvg({ onOpenFlowDiagram, initialGroupId }: {
+  onOpenFlowDiagram?: (ifaceId: string, groupId: string) => void
+  initialGroupId?: string
 }) {
   const api = useRegistryApi()
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
@@ -639,6 +641,7 @@ export default function GroupDiagramSvg({ onOpenFlowDiagram }: {
 
   useEffect(() => { api.load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { panZoomRef.current = { pan, zoom } }, [pan, zoom])
+  useEffect(() => { if (initialGroupId) setSelectedGroupId(initialGroupId) }, [initialGroupId])
 
   // Load saved positions when group changes
   useEffect(() => {
@@ -801,7 +804,7 @@ export default function GroupDiagramSvg({ onOpenFlowDiagram }: {
 
   function onEdgeClick(e: React.MouseEvent, ep: EdgePath) {
     e.stopPropagation()
-    setContextMenu({ x: e.clientX, y: e.clientY, edgeId: ep.id, ref: ep.ref === '…' ? ep.id.split('-')[0] : ep.ref, ifaceId: ep.ifaceId })
+    setContextMenu({ x: e.clientX, y: e.clientY, edgeId: ep.id, ref: ep.ref === '…' ? ep.id.split('-')[0] : ep.ref, ifaceId: ep.ifaceId, groupId: selectedGroupId ?? '' })
   }
 
   const containerRect = containerRef.current?.getBoundingClientRect()
