@@ -89,7 +89,9 @@ function ViaEditor({ value, onChange, platforms = [], systems = [] }: {
         <select style={{ ...fieldStyle, flex: 2, minWidth: 140 }} value="" onChange={e => { if (e.target.value) addSystem(e.target.value) }}>
           <option value="">+ System (linked)</option>
           {[...systems].sort((a, b) => a.name.localeCompare(b.name)).map(s => (
-            <option key={s.id} value={s.id}>{s.name}</option>
+            <option key={s.id} value={s.id}>
+              {s.system_type && s.system_type !== s.name ? `${s.name} (${s.system_type})` : s.name}
+            </option>
           ))}
         </select>
         {platforms.length > 0 && (
