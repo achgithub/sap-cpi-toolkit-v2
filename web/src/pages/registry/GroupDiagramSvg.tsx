@@ -301,11 +301,12 @@ function buildEdgePaths(
       const LABEL_T = [0.1, 0.3, 0.5, 0.7, 0.9]
       const tCanon  = LABEL_T[labelIdx % LABEL_T.length]
       const t       = e.fromId === canonicalFromId ? tCanon : 1 - tCanon
-      // Add half the arc's perpendicular offset so arcs sharing the same t-slot
-      // don't stack at the same screen position. Without this, chord interpolation
-      // gives identical (lx,ly) for every arc at the same t-value.
-      const lx = (1-t)*p1.x + t*p2.x + canon_px * offset * 0.5
-      const ly = (1-t)*p1.y + t*p2.y + canon_py * offset * 0.5
+      // Label ON the arc: quadratic Bezier at t using the canonical control point.
+      // Each arc has a unique offset → unique mx/my → unique Bezier position.
+      // Pure chord interpolation gave identical screen positions for all arcs
+      // sharing the same t-slot (offset has no effect on a straight line).
+      const lx = (1-t)*(1-t)*p1.x + 2*t*(1-t)*mx + t*t*p2.x
+      const ly = (1-t)*(1-t)*p1.y + 2*t*(1-t)*my + t*t*p2.y
 
       const screenDist = len * zoom
       // Empty ref = routing-only edge (shared via hop), no label pill
