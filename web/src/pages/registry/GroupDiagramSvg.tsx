@@ -263,18 +263,13 @@ function buildEdgePaths(
 
       const d = `M ${p1.x} ${p1.y} Q ${mx} ${my} ${p2.x} ${p2.y}`
 
-      // Label at bezier midpoint (t=0.5)
-      const lx_base = 0.25 * p1.x + 0.5 * mx + 0.25 * p2.x
-      const ly_base = 0.25 * p1.y + 0.5 * my + 0.25 * p2.y
-
-      // When nodes are primarily vertical, all midpoints land at the same Y and
-      // labels pile up horizontally. Apply a vertical stagger (18px per step) to
-      // separate them — keeps labels near the arc midpoint but spread vertically.
-      const primVertical = Math.abs(dy) > Math.abs(dx)
-      const lx = lx_base
-      const ly = primVertical && n > 2
-        ? ly_base + (i - (n - 1) / 2) * 18
-        : ly_base
+      // Cycle labels through 4 positions along the arc: left, left-centre,
+      // right-centre, right — then repeat. Works for both vertical and
+      // horizontal pairs without any orientation detection.
+      const LABEL_T = [0.2, 0.38, 0.62, 0.8]
+      const t  = LABEL_T[i % LABEL_T.length]
+      const lx = (1-t)*(1-t)*p1.x + 2*t*(1-t)*mx + t*t*p2.x
+      const ly = (1-t)*(1-t)*p1.y + 2*t*(1-t)*my + t*t*p2.y
 
       const screenDist = len * zoom
       const ref = screenDist >= MIN_LABEL_PX ? e.ref : '…'
