@@ -10,7 +10,8 @@ const HOP_W       = 120
 const HOP_H       = 40
 const ACCENT_H    = 6
 const MIN_LABEL_PX = 100   // screen px straight-line distance needed to show ref label
-const OFFSET_STEP  = 55    // canvas px between parallel arcs
+const OFFSET_STEP     = 55   // ideal canvas px between parallel arcs
+const MAX_HALF_SPREAD = 110  // max px from centre to outermost arc
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -244,9 +245,13 @@ function buildEdgePaths(
       const len = Math.hypot(dx, dy)
       if (len < 1) continue
 
-      // Perpendicular offset — positive offsets arc one way, negative the other
+      // Perpendicular unit vector
       const px = -dy / len, py = dx / len
-      const offset = (i - (n - 1) / 2) * OFFSET_STEP
+
+      // Cap step so total spread stays bounded regardless of edge count,
+      // and never exceeds 25% of the line length (prevents ballooning on short/vertical edges)
+      const step   = Math.min(OFFSET_STEP, n > 1 ? (MAX_HALF_SPREAD * 2) / (n - 1) : OFFSET_STEP, len * 0.25)
+      const offset = (i - (n - 1) / 2) * step
 
       // Quadratic bezier control point
       const mx = (fx + tx) / 2 + px * offset
