@@ -219,10 +219,12 @@ function buildEdgePaths(
 ): EdgePath[] {
   const nodeKind = new Map(nodeDefs.map(n => [n.id, n.kind]))
 
-  // Group by directed source→target pair for offset calculation
+  // Group by undirected pair so bidirectional arcs between the same two nodes
+  // form one bundle. Arrow direction is still correct on each arc; grouping
+  // by undirected pair means 9 going A→B + 3 going B→A = 12 visible lines.
   const groups = new Map<string, GraphEdge[]>()
   for (const e of edges) {
-    const key = `${e.fromId}→${e.toId}`
+    const key = [e.fromId, e.toId].sort().join('↔')
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key)!.push(e)
   }
