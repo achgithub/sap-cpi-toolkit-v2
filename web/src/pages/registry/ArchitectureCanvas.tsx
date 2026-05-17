@@ -187,38 +187,54 @@ function EdgeRefLabels({ pts, refs, color, scale }: {
 }) {
   if (!refs.length || pts.length < 2) return null
 
-  const segs  = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y))
-  const total = segs.reduce((s, l) => s + l, 0)
+  const segs = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y))
 
-  // How many labels fit with comfortable spacing (canvas units)?
+  // Only place labels on the longest segment — avoids crowding the short
+  // vertical elbow sections when many edges share the same routing corridor.
+  const longestIdx = segs.reduce((best, len, i) => len > segs[best] ? i : best, 0)
+  const segLen     = segs[longestIdx]
+  const segStart   = pts[longestIdx]
+  const segEnd     = pts[longestIdx + 1]
+
+  // How many labels fit on that segment at current zoom?
   const minStepCanvas = MIN_STEP / scale
-  const maxFit   = Math.max(1, Math.floor((total - minStepCanvas * 0.5) / minStepCanvas))
-  const visible  = refs.slice(0, maxFit)
+  if (segLen < minStepCanvas) {
+    // Segment too short to show any label — show one … at midpoint
+    const mx = (segStart.x + segEnd.x) / 2
+    const my = (segStart.y + segEnd.y) / 2
+    const lw = LABEL_W / scale, lh = PILL_H / scale
+    return (
+      <g transform={`translate(${mx},${my})`} style={{ pointerEvents: 'none' }}>
+        <rect x={-lw / 2 - 2 / scale} y={-lh / 2 - 2 / scale} width={lw + 4 / scale} height={lh + 4 / scale} rx={(lh / 2) + 2 / scale} fill="white" />
+        <rect x={-lw / 2} y={-lh / 2} width={lw} height={lh} rx={lh / 2} fill={color} />
+        <text textAnchor="middle" dominantBaseline="middle" fontSize={10 / scale} fill="#fff" fontWeight="600" fontFamily="var(--sapFontFamily)">…</text>
+      </g>
+    )
+  }
+
+  const maxFit  = Math.max(1, Math.floor((segLen - minStepCanvas * 0.5) / minStepCanvas))
+  const visible = refs.slice(0, maxFit)
   const overflow = refs.length > visible.length
-  const count    = visible.length + (overflow ? 1 : 0)
-  const step     = total / (count + 1)
+  const count   = visible.length + (overflow ? 1 : 0)
+  const step    = segLen / (count + 1)
 
   const lw = LABEL_W / scale
   const lh = PILL_H  / scale
   const fs = 10      / scale
+  const dx = (segEnd.x - segStart.x) / segLen
+  const dy = (segEnd.y - segStart.y) / segLen
 
   return (
     <>
       {Array.from({ length: count }, (_, li) => {
-        const pt   = pointAlongPath(pts, step * (li + 1), segs)
+        const d    = step * (li + 1)
+        const pt   = { x: segStart.x + dx * d, y: segStart.y + dy * d }
         const text = li < visible.length ? visible[li].trim() : '…'
         return (
           <g key={li} transform={`translate(${pt.x},${pt.y})`} style={{ pointerEvents: 'none' }}>
-            {/* White halo so pill stands out over the line */}
-            <rect x={-lw / 2 - 2 / scale} y={-lh / 2 - 2 / scale}
-              width={lw + 4 / scale} height={lh + 4 / scale}
-              rx={(lh / 2) + 2 / scale} fill="white" />
-            <rect x={-lw / 2} y={-lh / 2} width={lw} height={lh}
-              rx={lh / 2} fill={color} />
-            <text textAnchor="middle" dominantBaseline="middle"
-              fontSize={fs} fill="#fff" fontWeight="600" fontFamily="var(--sapFontFamily)">
-              {text}
-            </text>
+            <rect x={-lw / 2 - 2 / scale} y={-lh / 2 - 2 / scale} width={lw + 4 / scale} height={lh + 4 / scale} rx={(lh / 2) + 2 / scale} fill="white" />
+            <rect x={-lw / 2} y={-lh / 2} width={lw} height={lh} rx={lh / 2} fill={color} />
+            <text textAnchor="middle" dominantBaseline="middle" fontSize={fs} fill="#fff" fontWeight="600" fontFamily="var(--sapFontFamily)">{text}</text>
           </g>
         )
       })}
