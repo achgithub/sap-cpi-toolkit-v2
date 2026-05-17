@@ -216,6 +216,7 @@ function buildEdgePaths(
   edges: GraphEdge[],
   nodeDefs: NodeDef[],
   posMap: Record<string, { x: number; y: number }>,
+  sizes: Record<string, { w: number; h: number }>,
   zoom: number,
 ): EdgePath[] {
   const nodeKind = new Map(nodeDefs.map(n => [n.id, n.kind]))
@@ -249,8 +250,8 @@ function buildEdgePaths(
     if (canonFromPos && canonToPos) {
       const cfHop = nodeKind.get(canonicalFromId) === 'hop'
       const ctHop = nodeKind.get(canonicalToId)   === 'hop'
-      const cfw = cfHop ? HOP_W : NODE_W, cfh = cfHop ? HOP_H : NODE_H
-      const ctw = ctHop ? HOP_W : NODE_W, cth = ctHop ? HOP_H : NODE_H
+      const { w: cfw, h: cfh } = sizes[canonicalFromId] ?? { w: cfHop ? HOP_W : NODE_W, h: cfHop ? HOP_H : NODE_H }
+      const { w: ctw, h: cth } = sizes[canonicalToId]   ?? { w: ctHop ? HOP_W : NODE_W, h: ctHop ? HOP_H : NODE_H }
       const cfx = canonFromPos.x + cfw / 2, cfy = canonFromPos.y + cfh / 2
       const ctx = canonToPos.x   + ctw / 2, cty = canonToPos.y   + cth / 2
       const cdx = ctx - cfx, cdy = cty - cfy
@@ -274,8 +275,8 @@ function buildEdgePaths(
 
       const fkind = nodeKind.get(e.fromId) === 'hop'
       const tkind = nodeKind.get(e.toId)   === 'hop'
-      const fw = fkind ? HOP_W : NODE_W, fh = fkind ? HOP_H : NODE_H
-      const tw = tkind ? HOP_W : NODE_W, th = tkind ? HOP_H : NODE_H
+      const { w: fw, h: fh } = sizes[e.fromId] ?? { w: fkind ? HOP_W : NODE_W, h: fkind ? HOP_H : NODE_H }
+      const { w: tw, h: th } = sizes[e.toId]   ?? { w: tkind ? HOP_W : NODE_W, h: tkind ? HOP_H : NODE_H }
 
       const fx = from.x + fw / 2, fy = from.y + fh / 2
       const tx = to.x   + tw / 2, ty = to.y   + th / 2
@@ -634,21 +635,35 @@ export default function GroupDiagramSvg({ onOpenFlowDiagram, onOpenRegistry, ini
   const [saveLabel,   setSaveLabel]   = useState('Save')
   const [pendingFit,  setPendingFit]  = useState(false)
   const [stepsPanel,  setStepsPanel]  = useState<{ ifaceId: string; ref: string } | null>(null)
+  const [nodeSizes,   setNodeSizes]   = useState<Record<string, { w: number; h: number }>>({})
 
-  const containerRef  = useRef<HTMLDivElement>(null)
-  const dragRef       = useRef<{ id: string; ox: number; oy: number; mx: number; my: number } | null>(null)
-  const panRef        = useRef<{ mx: number; my: number; px: number; py: number } | null>(null)
-  const posRef        = useRef<Record<string, { x: number; y: number }>>({})
-  const panZoomRef    = useRef({ pan: { x: 40, y: 40 }, zoom: 1 })
+  const containerRef   = useRef<HTMLDivElement>(null)
+  const dragRef        = useRef<{ id: string; ox: number; oy: number; mx: number; my: number } | null>(null)
+  const panRef         = useRef<{ mx: number; my: number; px: number; py: number } | null>(null)
+  const posRef         = useRef<Record<string, { x: number; y: number }>>({})
+  const panZoomRef     = useRef({ pan: { x: 40, y: 40 }, zoom: 1 })
+  const nodeSizesRef   = useRef<Record<string, { w: number; h: number }>>({})
+  const resizeRef      = useRef<{
+    id: string; handle: string
+    startX: number; startY: number
+    startW: number; startH: number
+    startNx: number; startNy: number
+  } | null>(null)
 
   useEffect(() => { api.load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { panZoomRef.current = { pan, zoom } }, [pan, zoom])
+  useEffect(() => { nodeSizesRef.current = nodeSizes }, [nodeSizes])
   useEffect(() => { if (initialGroupId) setSelectedGroupId(initialGroupId) }, [initialGroupId])
+
+  function nodeSize(id: string, kind: 'system' | 'hop') {
+    return nodeSizesRef.current[id] ?? { w: kind === 'hop' ? HOP_W : NODE_W, h: kind === 'hop' ? HOP_H : NODE_H }
+  }
 
   // Load saved positions when group changes
   useEffect(() => {
     if (!selectedGroupId) return
     setSavedPositions({})
+    setNodeSizes({}); nodeSizesRef.current = {}
     setPan({ x: 40, y: 40 })
     setZoom(1)
     setContextMenu(null)
@@ -656,14 +671,17 @@ export default function GroupDiagramSvg({ onOpenFlowDiagram, onOpenRegistry, ini
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.groupViz?.nodes?.length) {
-          // Saved layout exists — restore nodes, pan, and zoom
           const pos: Record<string, { x: number; y: number }> = {}
-          for (const n of data.groupViz.nodes) pos[n.id] = { x: n.x, y: n.y }
+          const sizes: Record<string, { w: number; h: number }> = {}
+          for (const n of data.groupViz.nodes) {
+            pos[n.id] = { x: n.x, y: n.y }
+            if (n.w !== undefined && n.h !== undefined) sizes[n.id] = { w: n.w, h: n.h }
+          }
           setSavedPositions(pos)
+          setNodeSizes(sizes); nodeSizesRef.current = sizes
           if (data.groupViz.pan)  setPan(data.groupViz.pan)
           if (data.groupViz.zoom) setZoom(data.groupViz.zoom)
         } else {
-          // Fresh layout — auto-fit once nodePositions have settled
           setPendingFit(true)
         }
       })
@@ -705,8 +723,8 @@ export default function GroupDiagramSvg({ onOpenFlowDiagram, onOpenRegistry, ini
 
   // Build edge paths (memoized, re-runs on zoom for label density)
   const edgePaths = useMemo(() =>
-    buildEdgePaths(edges, patchedNodeDefs, nodePositions, zoom),
-    [edges, patchedNodeDefs, nodePositions, zoom]
+    buildEdgePaths(edges, patchedNodeDefs, nodePositions, nodeSizes, zoom),
+    [edges, patchedNodeDefs, nodePositions, nodeSizes, zoom]
   )
 
   // ── Interaction ─────────────────────────────────────────────────────────────
@@ -749,7 +767,25 @@ export default function GroupDiagramSvg({ onOpenFlowDiagram, onOpenRegistry, ini
   }
 
   function onMouseMove(e: React.MouseEvent) {
-    if (dragRef.current) {
+    if (resizeRef.current) {
+      const { id, handle, startX, startY, startW, startH, startNx, startNy } = resizeRef.current
+      const dx = (e.clientX - startX) / zoom
+      const dy = (e.clientY - startY) / zoom
+      const MIN_W = 80, MIN_H = 40
+      let nw = startW, nh = startH, nx = startNx, ny = startNy
+      if (handle.includes('e')) nw = Math.max(MIN_W, startW + dx)
+      if (handle.includes('w')) { nw = Math.max(MIN_W, startW - dx); nx = startNx + startW - nw }
+      if (handle.includes('s')) nh = Math.max(MIN_H, startH + dy)
+      if (handle.includes('n')) { nh = Math.max(MIN_H, startH - dy); ny = startNy + startH - nh }
+      const updSizes = { ...nodeSizesRef.current, [id]: { w: nw, h: nh } }
+      nodeSizesRef.current = updSizes
+      setNodeSizes({ ...updSizes })
+      if (nx !== startNx || ny !== startNy) {
+        const updPos = { ...posRef.current, [id]: { x: nx, y: ny } }
+        posRef.current = updPos
+        setNodePositions({ ...updPos })
+      }
+    } else if (dragRef.current) {
       setIsDragging(true)
       const { id, ox, oy, mx, my } = dragRef.current
       const dx = (e.clientX - mx) / zoom, dy = (e.clientY - my) / zoom
@@ -764,7 +800,10 @@ export default function GroupDiagramSvg({ onOpenFlowDiagram, onOpenRegistry, ini
 
   const savePositions = useCallback((showFeedback = false) => {
     if (!selectedGroupId) return
-    const nodes = Object.entries(posRef.current).map(([id, p]) => ({ id, x: p.x, y: p.y }))
+    const nodes = Object.entries(posRef.current).map(([id, p]) => {
+        const sz = nodeSizesRef.current[id]
+        return { id, x: p.x, y: p.y, ...(sz ? { w: sz.w, h: sz.h } : {}) }
+      })
     fetch(`${BASE}/logical-groups/${selectedGroupId}/flow-diagram`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -778,7 +817,8 @@ export default function GroupDiagramSvg({ onOpenFlowDiagram, onOpenRegistry, ini
   }, [selectedGroupId])
 
   function onMouseUp() {
-    if (dragRef.current && isDragging) savePositions()
+    if (resizeRef.current) { savePositions(); resizeRef.current = null }
+    else if (dragRef.current && isDragging) savePositions()
     dragRef.current = null
     panRef.current  = null
     setIsDragging(false)
@@ -793,11 +833,11 @@ export default function GroupDiagramSvg({ onOpenFlowDiagram, onOpenRegistry, ini
     const minY = Math.min(...pos.map(p => p.y))
     const maxX = Math.max(...Object.entries(nodePositions).map(([id, p]) => {
       const n = patchedNodeDefs.find(n => n.id === id)
-      return p.x + (n?.kind === 'hop' ? HOP_W : NODE_W)
+      return p.x + (nodeSizes[id]?.w ?? (n?.kind === 'hop' ? HOP_W : NODE_W))
     }))
     const maxY = Math.max(...Object.entries(nodePositions).map(([id, p]) => {
       const n = patchedNodeDefs.find(n => n.id === id)
-      return p.y + (n?.kind === 'hop' ? HOP_H : NODE_H)
+      return p.y + (nodeSizes[id]?.h ?? (n?.kind === 'hop' ? HOP_H : NODE_H))
     }))
     const nz = Math.max(0.15, Math.min((rect.width - 80) / (maxX - minX), (rect.height - 80) / (maxY - minY), 2))
     setZoom(nz)
@@ -904,25 +944,47 @@ export default function GroupDiagramSvg({ onOpenFlowDiagram, onOpenRegistry, ini
                     </g>
                   ))}
 
-                  {/* Pass 2: nodes */}
+                  {/* Pass 2: nodes + resize handles */}
                   {patchedNodeDefs.map(n => {
                     const p = nodePositions[n.id]
                     if (!p) return null
+                    const { w: nw, h: nh } = nodeSize(n.id, n.kind)
+                    const HS = 6 / zoom  // handle size in canvas px
+                    const handles = [
+                      { id: 'n',  cx: nw/2, cy: 0,   cursor: 'n-resize'  },
+                      { id: 'ne', cx: nw,   cy: 0,   cursor: 'ne-resize' },
+                      { id: 'e',  cx: nw,   cy: nh/2, cursor: 'e-resize'  },
+                      { id: 'se', cx: nw,   cy: nh,  cursor: 'se-resize' },
+                      { id: 's',  cx: nw/2, cy: nh,  cursor: 's-resize'  },
+                      { id: 'sw', cx: 0,    cy: nh,  cursor: 'sw-resize' },
+                      { id: 'w',  cx: 0,    cy: nh/2, cursor: 'w-resize'  },
+                      { id: 'nw', cx: 0,    cy: 0,   cursor: 'nw-resize' },
+                    ]
 
                     if (n.kind === 'hop') {
-                      // Pill-style node for via-hops
                       return (
-                        <g key={n.id} transform={`translate(${p.x},${p.y})`}
-                          style={{ cursor: isDragging && dragRef.current?.id === n.id ? 'grabbing' : 'grab' }}
-                          onMouseDown={e => onNodeMouseDown(e, n.id)}>
-                          <rect width={HOP_W} height={HOP_H} rx={HOP_H / 2}
-                            fill="var(--sapTile_Background)" stroke={n.color} strokeWidth={1.5} />
-                          <text x={HOP_W / 2} y={HOP_H / 2}
-                            textAnchor="middle" dominantBaseline="middle"
-                            fontSize={10} fill="var(--sapTextColor)" fontFamily="var(--sapFontFamily)"
-                            style={{ userSelect: 'none', pointerEvents: 'none' }}>
-                            {n.label.length > 16 ? n.label.slice(0, 15) + '…' : n.label}
-                          </text>
+                        <g key={n.id} transform={`translate(${p.x},${p.y})`}>
+                          <g style={{ cursor: isDragging && dragRef.current?.id === n.id ? 'grabbing' : 'grab' }}
+                            onMouseDown={e => onNodeMouseDown(e, n.id)}>
+                            <rect width={nw} height={nh} rx={nh / 2}
+                              fill="var(--sapTile_Background)" stroke={n.color} strokeWidth={1.5} />
+                            <text x={nw / 2} y={nh / 2}
+                              textAnchor="middle" dominantBaseline="middle"
+                              fontSize={10} fill="var(--sapTextColor)" fontFamily="var(--sapFontFamily)"
+                              style={{ userSelect: 'none', pointerEvents: 'none' }}>
+                              {n.label.length > 16 ? n.label.slice(0, 15) + '…' : n.label}
+                            </text>
+                          </g>
+                          {handles.map(h => (
+                            <rect key={h.id}
+                              x={h.cx - HS/2} y={h.cy - HS/2} width={HS} height={HS}
+                              fill="#0070F2" opacity={0.7} rx={1}
+                              style={{ cursor: h.cursor }}
+                              onMouseDown={e => {
+                                e.stopPropagation()
+                                resizeRef.current = { id: n.id, handle: h.id, startX: e.clientX, startY: e.clientY, startW: nw, startH: nh, startNx: p.x, startNy: p.y }
+                              }} />
+                          ))}
                         </g>
                       )
                     }
@@ -931,37 +993,48 @@ export default function GroupDiagramSvg({ onOpenFlowDiagram, onOpenRegistry, ini
                     const sys = api.systems.find(s => s.id === n.id)
                     const infra = [sys?.infra_type, sys?.infra_region].filter(Boolean).join(' · ')
                     return (
-                      <g key={n.id} transform={`translate(${p.x},${p.y})`}
-                        style={{ cursor: isDragging && dragRef.current?.id === n.id ? 'grabbing' : 'grab' }}
-                        onMouseDown={e => onNodeMouseDown(e, n.id)}>
-                        <title>{n.label}</title>
-                        <rect width={NODE_W} height={NODE_H} rx={6}
-                          fill="var(--sapTile_Background)" stroke={n.color} strokeWidth={1.5} />
-                        <rect width={NODE_W} height={ACCENT_H} rx={6} fill={n.color} />
-                        <rect width={NODE_W} height={3} y={3} fill={n.color} />
-                        <text x={NODE_W / 2} y={34}
-                          textAnchor="middle" dominantBaseline="middle"
-                          fontSize={13} fontWeight="bold"
-                          fill="var(--sapTextColor)" fontFamily="var(--sapFontFamily)"
-                          style={{ userSelect: 'none', pointerEvents: 'none' }}>
-                          {n.label.length > 18 ? n.label.slice(0, 17) + '…' : n.label}
-                        </text>
-                        {sys?.system_type && (
-                          <text x={NODE_W / 2} y={56}
+                      <g key={n.id} transform={`translate(${p.x},${p.y})`}>
+                        <g style={{ cursor: isDragging && dragRef.current?.id === n.id ? 'grabbing' : 'grab' }}
+                          onMouseDown={e => onNodeMouseDown(e, n.id)}>
+                          <title>{n.label}</title>
+                          <rect width={nw} height={nh} rx={6}
+                            fill="var(--sapTile_Background)" stroke={n.color} strokeWidth={1.5} />
+                          <rect width={nw} height={ACCENT_H} rx={6} fill={n.color} />
+                          <rect width={nw} height={3} y={3} fill={n.color} />
+                          <text x={nw / 2} y={34}
                             textAnchor="middle" dominantBaseline="middle"
-                            fontSize={10} fill={n.color} fontFamily="var(--sapFontFamily)"
+                            fontSize={13} fontWeight="bold"
+                            fill="var(--sapTextColor)" fontFamily="var(--sapFontFamily)"
                             style={{ userSelect: 'none', pointerEvents: 'none' }}>
-                            {sys.system_type}
+                            {n.label.length > 18 ? n.label.slice(0, 17) + '…' : n.label}
                           </text>
-                        )}
-                        {infra && (
-                          <text x={NODE_W / 2} y={74}
-                            textAnchor="middle" dominantBaseline="middle"
-                            fontSize={9} fill="var(--sapContent_LabelColor)" fontFamily="var(--sapFontFamily)"
-                            style={{ userSelect: 'none', pointerEvents: 'none' }}>
-                            {infra}
-                          </text>
-                        )}
+                          {sys?.system_type && (
+                            <text x={nw / 2} y={56}
+                              textAnchor="middle" dominantBaseline="middle"
+                              fontSize={10} fill={n.color} fontFamily="var(--sapFontFamily)"
+                              style={{ userSelect: 'none', pointerEvents: 'none' }}>
+                              {sys.system_type}
+                            </text>
+                          )}
+                          {infra && (
+                            <text x={nw / 2} y={74}
+                              textAnchor="middle" dominantBaseline="middle"
+                              fontSize={9} fill="var(--sapContent_LabelColor)" fontFamily="var(--sapFontFamily)"
+                              style={{ userSelect: 'none', pointerEvents: 'none' }}>
+                              {infra}
+                            </text>
+                          )}
+                        </g>
+                        {handles.map(h => (
+                          <rect key={h.id}
+                            x={h.cx - HS/2} y={h.cy - HS/2} width={HS} height={HS}
+                            fill="#0070F2" opacity={0.7} rx={1}
+                            style={{ cursor: h.cursor }}
+                            onMouseDown={e => {
+                              e.stopPropagation()
+                              resizeRef.current = { id: n.id, handle: h.id, startX: e.clientX, startY: e.clientY, startW: nw, startH: nh, startNx: p.x, startNy: p.y }
+                            }} />
+                        ))}
                       </g>
                     )
                   })}
