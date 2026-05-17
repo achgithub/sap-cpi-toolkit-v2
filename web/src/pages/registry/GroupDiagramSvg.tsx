@@ -236,7 +236,26 @@ function buildEdgePaths(
     // The undirected key is "idA↔idB" where idA < idB alphabetically.
     // canonicalFromId is always idA, so t=0.1 means "near idA" for every
     // arc in this group regardless of which direction the arc flows.
-    const canonicalFromId = key.split('↔')[0]
+    const [canonicalFromId, canonicalToId] = key.split('↔')
+
+    // Canonical perpendicular — computed once from the A→B chord direction and
+    // shared by all arcs in the group. Without this, reverse arcs (B→A) have an
+    // opposite perpendicular so their offsets mirror canonical arcs, causing pairs
+    // to overlap (arc 9 lands on arc 2, arc 10 on arc 1, arc 11 on arc 0 → 9 visible).
+    let canon_px = 0, canon_py = 1
+    const canonFromPos = posMap[canonicalFromId]
+    const canonToPos   = posMap[canonicalToId]
+    if (canonFromPos && canonToPos) {
+      const cfHop = nodeKind.get(canonicalFromId) === 'hop'
+      const ctHop = nodeKind.get(canonicalToId)   === 'hop'
+      const cfw = cfHop ? HOP_W : NODE_W, cfh = cfHop ? HOP_H : NODE_H
+      const ctw = ctHop ? HOP_W : NODE_W, cth = ctHop ? HOP_H : NODE_H
+      const cfx = canonFromPos.x + cfw / 2, cfy = canonFromPos.y + cfh / 2
+      const ctx = canonToPos.x   + ctw / 2, cty = canonToPos.y   + cth / 2
+      const cdx = ctx - cfx, cdy = cty - cfy
+      const clen = Math.hypot(cdx, cdy)
+      if (clen > 1) { canon_px = -cdy / clen; canon_py = cdx / clen }
+    }
 
     let labelIdx = 0
     for (let i = 0; i < n; i++) {
@@ -257,21 +276,15 @@ function buildEdgePaths(
       const len = Math.hypot(dx, dy)
       if (len < 1) continue
 
-      // Perpendicular unit vector
-      const px = -dy / len, py = dx / len
+      // Each arc gets a unique offset — no negation for reverse arcs.
+      // canon_px/py ensures all arcs bow in the same direction so they
+      // form one unified spread rather than two mirrored bundles.
+      const step   = Math.min(OFFSET_STEP, n > 1 ? (MAX_HALF_SPREAD * 2) / (n - 1) : OFFSET_STEP, len * 0.25)
+      const offset = (i - (n - 1) / 2) * step
 
-      // Cap step so total spread stays bounded regardless of edge count,
-      // and never exceeds 25% of the line length (prevents ballooning on short/vertical edges)
-      const step     = Math.min(OFFSET_STEP, n > 1 ? (MAX_HALF_SPREAD * 2) / (n - 1) : OFFSET_STEP, len * 0.25)
-      const rawOffset = (i - (n - 1) / 2) * step
-      // Negate offset for arcs going opposite to canonical direction so all arcs
-      // bow in the same perpendicular direction, forming one unified spread instead
-      // of two mirrored bundles (9 one way, 3 the other).
-      const offset   = e.fromId === canonicalFromId ? rawOffset : -rawOffset
-
-      // Quadratic bezier control point
-      const mx = (fx + tx) / 2 + px * offset
-      const my = (fy + ty) / 2 + py * offset
+      // Quadratic bezier control point using canonical perpendicular
+      const mx = (fx + tx) / 2 + canon_px * offset
+      const my = (fy + ty) / 2 + canon_py * offset
 
       // Clamp to node borders
       const p1 = nodeBorderPoint(from.x, from.y, fw, fh, mx, my)
