@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import CytoscapeComponent from 'react-cytoscapejs'
-import type Cytoscape from 'cytoscape'
+import type cytoscape from 'cytoscape'
 import type { Interface, System, LogicalGroup, RegistryConfig } from './types'
 import { getSystemColor } from './types'
 import { useRegistryApi } from './useRegistryApi'
@@ -103,17 +103,16 @@ const STATUS_EDGE_COLOR: Record<string, string> = {
 
 // ── Cytoscape stylesheet ──────────────────────────────────────────────────────
 
-const stylesheet: Cytoscape.Stylesheet[] = [
+const stylesheet: cytoscape.StylesheetCSS[] = [
   {
     selector: 'node',
-    style: {
+    css: {
       width:  NODE_W,
       height: NODE_H,
       shape:  'rectangle',
       'background-color':   'data(color)',
       'border-width':       2,
       'border-color':       'data(color)',
-      'border-opacity':     1,
       label:                'data(label)',
       'text-valign':        'center',
       'text-halign':        'center',
@@ -123,11 +122,11 @@ const stylesheet: Cytoscape.Stylesheet[] = [
       'font-size':          13,
       'font-weight':        'bold',
       'font-family':        'var(--sapFontFamily, sans-serif)',
-    } as Cytoscape.NodeSingularStyleProperties,
+    } as cytoscape.Css.Node,
   },
   {
     selector: 'edge',
-    style: {
+    css: {
       width:               1.5,
       'line-color':        'data(color)',
       'target-arrow-color':'data(color)',
@@ -143,33 +142,30 @@ const stylesheet: Cytoscape.Stylesheet[] = [
       'text-background-opacity': 0.85,
       'text-background-padding': '2px',
       'text-background-shape':   'roundrectangle',
-      'text-border-width':       0,
-    } as Cytoscape.EdgeSingularStyleProperties,
+    } as cytoscape.Css.Edge,
   },
   {
     selector: 'node:selected',
-    style: {
+    css: {
       'border-color': '#0070F2',
       'border-width':  3,
-    } as Cytoscape.NodeSingularStyleProperties,
+    } as cytoscape.Css.Node,
   },
 ]
 
 // ── Layout ────────────────────────────────────────────────────────────────────
 
-function makeLayout(hasSavedPositions: boolean): Cytoscape.LayoutOptions {
-  if (hasSavedPositions) {
-    return { name: 'preset' } as Cytoscape.LayoutOptions
-  }
+function makeLayout(hasSavedPositions: boolean): cytoscape.LayoutOptions {
+  if (hasSavedPositions) return { name: 'preset' }
   return {
     name: 'concentric',
-    concentric:  (node: Cytoscape.NodeSingular) => node.degree(false),
-    levelWidth:  () => 2,
+    concentric:     (node: cytoscape.NodeSingular) => node.degree(false),
+    levelWidth:     () => 2,
     minNodeSpacing: 60,
     spacingFactor:  1.4,
-    padding: 60,
-    animate: false,
-  } as Cytoscape.LayoutOptions
+    padding:        60,
+    animate:        false,
+  } as unknown as cytoscape.LayoutOptions
 }
 
 // ── Left panel ────────────────────────────────────────────────────────────────
@@ -213,7 +209,7 @@ export default function GroupDiagramCyto() {
   const [savedPositions,  setSavedPositions]  = useState<Record<string, { x: number; y: number }>>({})
   const [panelCollapsed,  setPanelCollapsed]  = useState(false)
   const [showRefs,        setShowRefs]        = useState(true)
-  const cyRef = useRef<Cytoscape.Core | null>(null)
+  const cyRef = useRef<cytoscape.Core | null>(null)
 
   useEffect(() => { api.load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -329,7 +325,7 @@ export default function GroupDiagramCyto() {
               elements={elements}
               stylesheet={stylesheet}
               layout={makeLayout(hasSaved)}
-              cy={cy => {
+              cy={(cy: cytoscape.Core) => {
                 cyRef.current = cy
                 cy.on('dragfreeon', 'node', savePositions)
               }}
