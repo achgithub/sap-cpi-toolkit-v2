@@ -29,6 +29,9 @@ function buildElements(
     .sort((a, b) => (a.sequence_in_group ?? 999) - (b.sequence_in_group ?? 999))
 
   const nodeMap = new Map<string, { id: string; label: string; color: string }>()
+  // Weight = times a system appears as sender or receiver (not via hop)
+  // This drives the concentric layout so business systems beat middleware
+  const ifaceWeight = new Map<string, number>()
   const elements: CyElement[] = []
 
   function ensureNode(sysId: string) {
@@ -41,12 +44,17 @@ function buildElements(
     })
   }
 
-  // Collect all unique nodes
+  function bumpWeight(sysId: string) {
+    ifaceWeight.set(sysId, (ifaceWeight.get(sysId) ?? 0) + 1)
+  }
+
+  // Collect nodes and compute weights
   for (const iface of groupIfaces) {
-    if (iface.sender_system_id) ensureNode(iface.sender_system_id)
+    if (iface.sender_system_id) { ensureNode(iface.sender_system_id); bumpWeight(iface.sender_system_id) }
     for (const r of iface.receivers) {
-      if (r.system_id) ensureNode(r.system_id)
+      if (r.system_id) { ensureNode(r.system_id); bumpWeight(r.system_id) }
     }
+    // Via hops are added as nodes but get no weight bonus — they won't end up central
     for (const hop of iface.via) {
       if (hop.system_id) ensureNode(hop.system_id)
     }
@@ -56,7 +64,7 @@ function buildElements(
   for (const [id, n] of nodeMap) {
     const saved = savedPositions[id]
     elements.push({
-      data: { id: n.id, label: n.label, color: n.color },
+      data: { id: n.id, label: n.label, color: n.color, weight: ifaceWeight.get(id) ?? 0 },
       ...(saved ? { position: saved } : {}),
     })
   }
@@ -132,8 +140,8 @@ const stylesheet: cytoscape.StylesheetCSS[] = [
       'target-arrow-color':'data(color)',
       'target-arrow-shape':'triangle',
       'arrow-scale':       0.8,
-      'curve-style':       'unbundled-bezier',
-      'control-point-step-size': 30,
+      'curve-style':            'bezier',
+      'control-point-step-size': 50,
       label:               'data(ref)',
       'font-size':         9,
       'font-family':       'var(--sapFontFamily, sans-serif)',
@@ -159,11 +167,13 @@ function makeLayout(hasSavedPositions: boolean): cytoscape.LayoutOptions {
   if (hasSavedPositions) return { name: 'preset' }
   return {
     name: 'concentric',
-    concentric:     (node: cytoscape.NodeSingular) => node.degree(false),
-    levelWidth:     () => 2,
-    minNodeSpacing: 60,
-    spacingFactor:  1.4,
-    padding:        60,
+    // Use pre-computed interface weight (sender+receiver count) — not graph
+    // degree — so business systems beat middleware/via-hop nodes
+    concentric:     (node: cytoscape.NodeSingular) => node.data('weight') as number,
+    levelWidth:     () => 1,
+    minNodeSpacing: 80,
+    spacingFactor:  1.6,
+    padding:        80,
     animate:        false,
   } as unknown as cytoscape.LayoutOptions
 }
