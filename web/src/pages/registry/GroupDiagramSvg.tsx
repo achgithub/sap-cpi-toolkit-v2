@@ -276,8 +276,11 @@ function buildEdgePaths(
       // one arc apart — evenly distributed for both vertical and horizontal.
       const LABEL_T = [0.1, 0.3, 0.5, 0.7, 0.9]
       const t  = LABEL_T[labelIdx % LABEL_T.length]
-      const lx = (1-t)*(1-t)*p1.x + 2*t*(1-t)*mx + t*t*p2.x
-      const ly = (1-t)*(1-t)*p1.y + 2*t*(1-t)*my + t*t*p2.y
+      // Use chord interpolation (not Bezier) so the label stays between the two
+      // endpoint nodes. The Bezier midpoint can wander far from the chord when
+      // arcs are long, placing labels visually inside another pair's arc bundle.
+      const lx = (1-t)*p1.x + t*p2.x
+      const ly = (1-t)*p1.y + t*p2.y
 
       const screenDist = len * zoom
       // Empty ref = routing-only edge (shared via hop), no label pill
