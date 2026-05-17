@@ -417,26 +417,127 @@ function MiniMap({ nodeDefs, posMap, pan, zoom, containerW, containerH, onNaviga
   )
 }
 
+// ── Steps panel ───────────────────────────────────────────────────────────────
+
+import type { FlowDiagramState, FlowStep } from './FlowCanvas'
+
+function StepsPanel({ ifaceId, ifaceRef, onClose }: {
+  ifaceId: string; ifaceRef: string; onClose: () => void
+}) {
+  const [steps, setSteps]     = useState<(FlowStep & { nodeName: string })[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`${BASE}/interfaces/${ifaceId}/flow-diagram`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: FlowDiagramState | null) => {
+        const collected: (FlowStep & { nodeName: string })[] = []
+        if (data?.nodes) {
+          for (const node of data.nodes) {
+            for (const step of (node.steps ?? [])) {
+              collected.push({ ...step, nodeName: node.label })
+            }
+          }
+        }
+        collected.sort((a, b) => a.num - b.num)
+        setSteps(collected)
+      })
+      .catch(() => setSteps([]))
+      .finally(() => setLoading(false))
+  }, [ifaceId])
+
+  return (
+    <div style={{
+      position: 'absolute', top: 0, right: 0, bottom: 0, width: 340,
+      background: 'var(--sapGroup_ContentBackground)',
+      borderLeft: '1px solid var(--sapList_BorderColor)',
+      display: 'flex', flexDirection: 'column', zIndex: 50,
+      boxShadow: '-4px 0 16px rgba(0,0,0,0.12)',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 14px', borderBottom: '1px solid var(--sapList_BorderColor)',
+        background: 'var(--sapGroup_TitleBackground)', flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            fontFamily: 'monospace', fontSize: '0.72rem', color: 'white',
+            background: '#0070F2', borderRadius: 3, padding: '1px 6px',
+          }}>{ifaceRef}</span>
+          <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--sapTextColor)' }}>
+            Steps
+          </span>
+        </div>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: 'var(--sapTextColor)' }}>✕</button>
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
+        {loading && (
+          <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)', textAlign: 'center', padding: '2rem' }}>
+            Loading…
+          </div>
+        )}
+        {!loading && steps.length === 0 && (
+          <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)', textAlign: 'center', padding: '2rem' }}>
+            No steps recorded for this interface.
+          </div>
+        )}
+        {steps.map(s => (
+          <div key={s.id} style={{
+            marginBottom: 10, padding: '8px 10px',
+            border: '1px solid var(--sapList_BorderColor)',
+            borderRadius: 6, background: 'var(--sapTile_Background)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: s.notes ? 4 : 0 }}>
+              <span style={{
+                fontFamily: 'monospace', fontSize: '0.72rem', color: 'white',
+                background: '#37474F', borderRadius: 10, padding: '1px 7px', flexShrink: 0,
+              }}>{s.num}</span>
+              <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', fontWeight: 600, color: 'var(--sapTextColor)', flex: 1 }}>
+                {s.text}
+              </span>
+              <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.68rem', color: 'var(--sapContent_LabelColor)', flexShrink: 0 }}>
+                {s.nodeName}
+              </span>
+            </div>
+            {s.notes && (
+              <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.78rem', color: 'var(--sapContent_LabelColor)', whiteSpace: 'pre-wrap', marginTop: 2, paddingLeft: 28 }}>
+                {s.notes}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Context menu ──────────────────────────────────────────────────────────────
 
-function EdgeContextMenu({ menu, onClose }: { menu: ContextMenu; onClose: () => void }) {
+function EdgeContextMenu({ menu, onClose, onShowSteps }: {
+  menu: ContextMenu; onClose: () => void
+  onShowSteps: (ifaceId: string, ref: string) => void
+}) {
   useEffect(() => {
     const handler = () => onClose()
     window.addEventListener('click', handler)
     return () => window.removeEventListener('click', handler)
   }, [onClose])
 
-  const menuItem = (label: string, icon: string, disabled = true) => (
+  const menuItem = (label: string, icon: string, onClick?: () => void) => (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8,
       padding: '7px 14px',
-      cursor: disabled ? 'default' : 'pointer',
-      opacity: disabled ? 0.45 : 1,
+      cursor: onClick ? 'pointer' : 'default',
+      opacity: onClick ? 1 : 0.45,
       fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapTextColor)',
-      borderRadius: 4,
-      background: 'transparent',
+      borderRadius: 4, background: 'transparent',
     }}
-      onMouseEnter={e => { if (!disabled) (e.currentTarget as HTMLElement).style.background = 'var(--sapList_Hover_Background)' }}
+      onClick={onClick}
+      onMouseEnter={e => { if (onClick) (e.currentTarget as HTMLElement).style.background = 'var(--sapList_Hover_Background)' }}
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
     >
       <span style={{ fontSize: '0.9rem', width: 16, textAlign: 'center' }}>{icon}</span>
@@ -455,7 +556,6 @@ function EdgeContextMenu({ menu, onClose }: { menu: ContextMenu; onClose: () => 
       }}
       onClick={e => e.stopPropagation()}
     >
-      {/* Header */}
       <div style={{
         padding: '8px 14px 6px', borderBottom: '1px solid var(--sapList_BorderColor)',
         display: 'flex', alignItems: 'center', gap: 8,
@@ -469,10 +569,10 @@ function EdgeContextMenu({ menu, onClose }: { menu: ContextMenu; onClose: () => 
         </span>
       </div>
       <div style={{ padding: '4px 0' }}>
-        {menuItem('Open in Registry',    '📋')}
-        {menuItem('Interface Summary',   '🔍')}
-        {menuItem('Open Flow Diagram',   '🗺️')}
-        {menuItem('Show Steps',          '📝')}
+        {menuItem('Open in Registry',  '📋')}
+        {menuItem('Interface Summary', '🔍')}
+        {menuItem('Open Flow Diagram', '🗺️')}
+        {menuItem('Show Steps', '📝', () => { onClose(); onShowSteps(menu.ifaceId, menu.ref) })}
       </div>
     </div>
   )
@@ -525,6 +625,7 @@ export default function GroupDiagramSvg() {
 
   const [saveLabel,   setSaveLabel]   = useState('Save')
   const [pendingFit,  setPendingFit]  = useState(false)
+  const [stepsPanel,  setStepsPanel]  = useState<{ ifaceId: string; ref: string } | null>(null)
 
   const containerRef  = useRef<HTMLDivElement>(null)
   const dragRef       = useRef<{ id: string; ox: number; oy: number; mx: number; my: number } | null>(null)
@@ -897,6 +998,15 @@ export default function GroupDiagramSvg() {
                 containerH={containerRect?.height ?? 600}
                 onNavigate={setPan}
               />
+
+              {/* Steps panel — overlays right side of canvas */}
+              {stepsPanel && (
+                <StepsPanel
+                  ifaceId={stepsPanel.ifaceId}
+                  ifaceRef={stepsPanel.ref}
+                  onClose={() => setStepsPanel(null)}
+                />
+              )}
             </div>
           </>
         )}
@@ -904,7 +1014,11 @@ export default function GroupDiagramSvg() {
 
       {/* Edge context menu */}
       {contextMenu && (
-        <EdgeContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
+        <EdgeContextMenu
+          menu={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onShowSteps={(ifaceId, ref) => setStepsPanel({ ifaceId, ref })}
+        />
       )}
     </div>
   )
