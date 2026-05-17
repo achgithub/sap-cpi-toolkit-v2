@@ -263,11 +263,11 @@ function buildEdgePaths(
 
       const d = `M ${p1.x} ${p1.y} Q ${mx} ${my} ${p2.x} ${p2.y}`
 
-      // 5 interleaved positions: adjacent arcs always jump to the opposite
-      // end of the arc so their labels are never visually adjacent.
-      // Repeat gap = 5 arcs, which exceeds the ~4-arc visual width of a label.
-      // Pattern: left, right-centre, left-centre, right, middle — repeat.
-      const LABEL_T = [0.15, 0.65, 0.35, 0.85, 0.5]
+      // 5 evenly-spaced positions, assigned sequentially: arc 1→A, 2→B,
+      // 3→C, 4→D, 5→E, 6→A … Label from one arc reaches ~4 arcs wide,
+      // and the cycle repeats every 5, so same-position labels are always
+      // one arc apart — evenly distributed for both vertical and horizontal.
+      const LABEL_T = [0.1, 0.3, 0.5, 0.7, 0.9]
       const t  = LABEL_T[i % LABEL_T.length]
       const lx = (1-t)*(1-t)*p1.x + 2*t*(1-t)*mx + t*t*p2.x
       const ly = (1-t)*(1-t)*p1.y + 2*t*(1-t)*my + t*t*p2.y
