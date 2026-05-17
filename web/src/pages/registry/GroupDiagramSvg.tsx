@@ -449,10 +449,10 @@ function StepsPanel({ ifaceId, ifaceRef, onClose }: {
 
   return (
     <div style={{
-      position: 'absolute', top: 0, right: 0, bottom: 0, width: 340,
+      width: 380, flexShrink: 0,
       background: 'var(--sapGroup_ContentBackground)',
       borderLeft: '1px solid var(--sapList_BorderColor)',
-      display: 'flex', flexDirection: 'column', zIndex: 50,
+      display: 'flex', flexDirection: 'column',
       boxShadow: '-4px 0 16px rgba(0,0,0,0.12)',
     }}>
       {/* Header */}
@@ -999,18 +999,19 @@ export default function GroupDiagramSvg() {
                 onNavigate={setPan}
               />
 
-              {/* Steps panel — overlays right side of canvas */}
-              {stepsPanel && (
-                <StepsPanel
-                  ifaceId={stepsPanel.ifaceId}
-                  ifaceRef={stepsPanel.ref}
-                  onClose={() => setStepsPanel(null)}
-                />
-              )}
             </div>
           </>
         )}
       </div>
+
+      {/* Steps panel — sibling to canvas, not inside it, so its scroll is independent */}
+      {stepsPanel && (
+        <StepsPanel
+          ifaceId={stepsPanel.ifaceId}
+          ifaceRef={stepsPanel.ref}
+          onClose={() => setStepsPanel(null)}
+        />
+      )}
 
       {/* Edge context menu */}
       {contextMenu && (
