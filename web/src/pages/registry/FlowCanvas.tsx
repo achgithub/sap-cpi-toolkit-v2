@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '@ui5/webcomponents-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -120,10 +121,75 @@ interface NodeBoxProps {
   onStepsChange: (steps: FlowStep[]) => void
 }
 
+function StepModal({ step, nodeColor, onSave, onClose }: {
+  step: FlowStep
+  nodeColor: string
+  onSave: (updated: FlowStep) => void
+  onClose: () => void
+}) {
+  const [title, setTitle] = useState(step.text)
+  const [notes, setNotes] = useState(step.notes)
+
+  return createPortal(
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div style={{ background: 'var(--sapTile_Background)', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.25)', width: 360, overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ height: 6, background: nodeColor }} />
+        <div style={{ padding: '12px 16px 4px', fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--sapTextColor)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'white', background: nodeColor, borderRadius: 3, padding: '1px 6px' }}>{step.num}</span>
+          Edit Step
+        </div>
+
+        <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Title — 20 char max */}
+          <div>
+            <label style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem', color: 'var(--sapContent_LabelColor)', display: 'block', marginBottom: 4 }}>
+              Title <span style={{ color: 'var(--sapContent_LabelColor)', fontWeight: 'normal' }}>(max 20 chars)</span>
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input
+                autoFocus
+                value={title}
+                maxLength={20}
+                onChange={e => setTitle(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onSave({ ...step, text: title, notes }) } if (e.key === 'Escape') onClose() }}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '5px 40px 5px 8px', fontSize: '0.875rem', fontFamily: 'var(--sapFontFamily)', border: '1px solid var(--sapList_BorderColor)', borderRadius: 4, outline: 'none', background: 'var(--sapField_Background)' }}
+              />
+              <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: '0.68rem', color: title.length >= 18 ? '#c0392b' : 'var(--sapContent_LabelColor)', fontFamily: 'monospace' }}>
+                {title.length}/20
+              </span>
+            </div>
+          </div>
+
+          {/* Notes — free text */}
+          <div>
+            <label style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem', color: 'var(--sapContent_LabelColor)', display: 'block', marginBottom: 4 }}>Notes</label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              rows={5}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '5px 8px', fontSize: '0.8rem', fontFamily: 'var(--sapFontFamily)', border: '1px solid var(--sapList_BorderColor)', borderRadius: 4, resize: 'vertical', outline: 'none', background: 'var(--sapField_Background)' }}
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '8px 16px 16px' }}>
+          <button onClick={onClose} style={{ padding: '5px 14px', fontSize: '0.8rem', fontFamily: 'var(--sapFontFamily)', border: '1px solid var(--sapList_BorderColor)', borderRadius: 4, background: 'var(--sapButton_Background)', cursor: 'pointer' }}>Cancel</button>
+          <button onClick={() => onSave({ ...step, text: title, notes })} style={{ padding: '5px 14px', fontSize: '0.8rem', fontFamily: 'var(--sapFontFamily)', border: '1px solid #0070F2', borderRadius: 4, background: '#0070F2', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>Save</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 function NodeBox({ node, selected, editing, onMouseDown, onDoubleClick, onLabelSave, onResizeMouseDown, onStepsChange }: NodeBoxProps) {
   const [draft, setDraft] = useState(node.label)
-  const [editingStep, setEditingStep] = useState<string | null>(null)
-  const [stepDraft, setStepDraft] = useState('')
+  const [modalStep, setModalStep] = useState<FlowStep | null>(null)
   useEffect(() => { setDraft(node.label) }, [node.label])
 
   // ── Boundary (vertical dashed line) ──────────────────────────────────────
@@ -226,45 +292,30 @@ function NodeBox({ node, selected, editing, onMouseDown, onDoubleClick, onLabelS
 
   function addStep(e: React.MouseEvent) {
     e.stopPropagation()
-    const newStep: FlowStep = { id: flowUid(), num: steps.length + 1, text: 'Step', notes: '' }
-    const updated = [...steps, newStep]
-    onStepsChange(updated)
-    setEditingStep(newStep.id)
-    setStepDraft(newStep.text)
+    const newStep: FlowStep = { id: flowUid(), num: steps.length + 1, text: 'New step', notes: '' }
+    onStepsChange([...steps, newStep])
+    setModalStep(newStep)
   }
 
   function deleteStep(e: React.MouseEvent, stepId: string) {
     e.stopPropagation()
-    const updated = steps.filter(s => s.id !== stepId).map((s, i) => ({ ...s, num: i + 1 }))
-    onStepsChange(updated)
+    onStepsChange(steps.filter(s => s.id !== stepId))
   }
 
-  function moveStep(e: React.MouseEvent, stepId: string, dir: 1 | -1) {
+  function nudgeNum(e: React.MouseEvent, stepId: string, delta: 1 | -1) {
     e.stopPropagation()
-    const idx = steps.findIndex(s => s.id === stepId)
-    const newIdx = idx + dir
-    if (newIdx < 0 || newIdx >= steps.length) return
-    const updated = [...steps]
-    ;[updated[idx], updated[newIdx]] = [updated[newIdx], updated[idx]]
-    onStepsChange(updated.map((s, i) => ({ ...s, num: i + 1 })))
+    onStepsChange(steps.map(s => s.id === stepId ? { ...s, num: Math.max(1, s.num + delta) } : s))
   }
 
-  function startEditStep(e: React.MouseEvent, step: FlowStep) {
-    e.stopPropagation()
-    setEditingStep(step.id)
-    setStepDraft(step.text)
-  }
-
-  function saveStep(stepId: string) {
-    const updated = steps.map(s => s.id === stepId ? { ...s, text: stepDraft } : s)
-    onStepsChange(updated)
-    setEditingStep(null)
+  function saveModalStep(updated: FlowStep) {
+    onStepsChange(steps.map(s => s.id === updated.id ? updated : s))
+    setModalStep(null)
   }
 
   const arrowBtn: React.CSSProperties = {
-    fontSize: '0.6rem', lineHeight: 1, padding: '1px 2px',
+    fontSize: '0.6rem', lineHeight: 1, padding: '1px 3px',
     background: 'transparent', border: 'none', cursor: 'pointer',
-    color: '#aaa', flexShrink: 0, display: 'flex', alignItems: 'center',
+    color: '#aaa', flexShrink: 0,
   }
 
   return (
@@ -299,7 +350,7 @@ function NodeBox({ node, selected, editing, onMouseDown, onDoubleClick, onLabelS
       </div>
 
       {/* Step rows */}
-      {steps.map((step, idx) => (
+      {steps.map(step => (
         <div key={step.id}
           style={{
             height: STEP_ROW_H, display: 'flex', alignItems: 'center',
@@ -307,23 +358,25 @@ function NodeBox({ node, selected, editing, onMouseDown, onDoubleClick, onLabelS
             background: step.ifaceColor ? step.ifaceColor + '18' : 'transparent',
           }}
         >
+          {/* Number nudge (only when selected, not group step) */}
+          {selected && !step.ifaceRef && (
+            <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+              <button style={arrowBtn} onMouseDown={e => e.stopPropagation()} onClick={e => nudgeNum(e, step.id,  1)} title="Increase number">▲</button>
+              <button style={arrowBtn} onMouseDown={e => e.stopPropagation()} onClick={e => nudgeNum(e, step.id, -1)} title="Decrease number">▼</button>
+            </div>
+          )}
+
           {/* Number badge */}
           <span style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'white', background: step.ifaceColor ?? node.color, borderRadius: 3, minWidth: 16, textAlign: 'center', padding: '0 2px', flexShrink: 0, fontWeight: 'bold' }}>
             {step.num}
           </span>
 
-          {/* Step text */}
-          {editingStep === step.id
-            ? <input autoFocus value={stepDraft} onChange={e => setStepDraft(e.target.value)}
-                onBlur={() => saveStep(step.id)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveStep(step.id) } }}
-                onClick={e => e.stopPropagation()}
-                style={{ flex: 1, fontSize: '0.72rem', border: 'none', outline: '1px solid #0070F2', fontFamily: 'var(--sapFontFamily)', borderRadius: 2, padding: '1px 4px', background: 'white' }} />
-            : <span
-                style={{ flex: 1, fontSize: '0.72rem', fontFamily: 'var(--sapFontFamily)', color: 'var(--sapTextColor)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text' }}
-                onDoubleClick={e => startEditStep(e, step)}
-              >{step.text}</span>
-          }
+          {/* Step title — click to open modal */}
+          <span
+            style={{ flex: 1, fontSize: '0.72rem', fontFamily: 'var(--sapFontFamily)', color: 'var(--sapTextColor)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
+            onMouseDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); setModalStep(step) }}
+          >{step.text}</span>
 
           {/* ifaceRef badge (group view) */}
           {step.ifaceRef && (
@@ -332,13 +385,11 @@ function NodeBox({ node, selected, editing, onMouseDown, onDoubleClick, onLabelS
             </span>
           )}
 
-          {/* Reorder + delete (only when selected and not a group-aggregated step) */}
-          {selected && !step.ifaceRef && (<>
-            <button style={arrowBtn} onClick={e => moveStep(e, step.id, -1)} title="Move up" disabled={idx === 0}>▲</button>
-            <button style={arrowBtn} onClick={e => moveStep(e, step.id,  1)} title="Move down" disabled={idx === steps.length - 1}>▼</button>
-            <button onClick={e => deleteStep(e, step.id)}
+          {/* Delete */}
+          {selected && !step.ifaceRef && (
+            <button onMouseDown={e => e.stopPropagation()} onClick={e => deleteStep(e, step.id)}
               style={{ ...arrowBtn, fontSize: '0.72rem', padding: '0 3px' }}>×</button>
-          </>)}
+          )}
         </div>
       ))}
 
@@ -356,6 +407,15 @@ function NodeBox({ node, selected, editing, onMouseDown, onDoubleClick, onLabelS
         <div key={dir} style={{ position: 'absolute', width: 8, height: 8, background: 'var(--sapTile_Background)', border: '1.5px solid #0070F2', borderRadius: 2, zIndex: 10, ...DIR_STYLE[dir] }}
           onMouseDown={e => { e.stopPropagation(); onResizeMouseDown(e, dir) }} />
       ))}
+
+      {modalStep && (
+        <StepModal
+          step={modalStep}
+          nodeColor={node.color}
+          onSave={saveModalStep}
+          onClose={() => setModalStep(null)}
+        />
+      )}
     </div>
   )
 }
