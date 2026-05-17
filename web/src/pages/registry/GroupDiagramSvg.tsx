@@ -93,33 +93,32 @@ function buildGraph(
     if (!iface.sender_system_id) continue
     const ref = iface.ref?.trim() || iface.name
 
-    // Label goes on the FIRST edge segment only — subsequent hops are routing arrows.
-    // This ensures each interface ref appears exactly once, on the departure segment.
-    let labeled = false
-    const takeRef = () => { if (labeled) return ''; labeled = true; return ref }
+    // Every arc in the route carries the interface ref — business rule:
+    // each drawn segment is identifiable regardless of how many hops it takes.
+    // S4→CPI arc shows IF-S4-SF-01; CPI→Salesforce arc also shows IF-S4-SF-01.
 
-    // Shared via chain
+    // Shared via chain (sender → platform → platform → ...)
     let sharedEnd = iface.sender_system_id
     for (let vi = 0; vi < iface.via.length; vi++) {
       const hop   = iface.via[vi]
       const hopId = hop.system_id ?? ensureHop(hop.label, '#6B7280')
       if (hop.system_id) ensureSys(hop.system_id, '#6B7280', hop.label)
-      edges.push({ id: `${iface.id}-via-${vi}`, fromId: sharedEnd, toId: hopId, ref: takeRef(), color: edgeColor, ifaceId: iface.id, receiverId: '' })
+      edges.push({ id: `${iface.id}-via-${vi}`, fromId: sharedEnd, toId: hopId, ref, color: edgeColor, ifaceId: iface.id, receiverId: '' })
       sharedEnd = hopId
     }
 
-    // Per-receiver legs
+    // Per-receiver legs (last platform → [receiver via(s)] → receiver)
     for (const recv of iface.receivers) {
       let prevId = sharedEnd
       for (let hi = 0; hi < recv.via.length; hi++) {
         const hop   = recv.via[hi]
         const hopId = hop.system_id ?? ensureHop(hop.label, '#6B7280')
         if (hop.system_id) ensureSys(hop.system_id, '#6B7280', hop.label)
-        edges.push({ id: `${iface.id}-recvvia-${recv.id}-${hi}`, fromId: prevId, toId: hopId, ref: takeRef(), color: edgeColor, ifaceId: iface.id, receiverId: recv.id })
+        edges.push({ id: `${iface.id}-recvvia-${recv.id}-${hi}`, fromId: prevId, toId: hopId, ref, color: edgeColor, ifaceId: iface.id, receiverId: recv.id })
         prevId = hopId
       }
       if (recv.system_id) {
-        edges.push({ id: `${iface.id}-${recv.id}`, fromId: prevId, toId: recv.system_id, ref: takeRef(), color: edgeColor, ifaceId: iface.id, receiverId: recv.id })
+        edges.push({ id: `${iface.id}-${recv.id}`, fromId: prevId, toId: recv.system_id, ref, color: edgeColor, ifaceId: iface.id, receiverId: recv.id })
       }
     }
   }
