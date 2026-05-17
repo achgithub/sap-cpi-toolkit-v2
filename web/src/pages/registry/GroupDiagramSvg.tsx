@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Interface, System, LogicalGroup, RegistryConfig } from './types'
+import type { Interface, LogicalGroup } from './types'
 import { getSystemColor } from './types'
 import { useRegistryApi } from './useRegistryApi'
 
@@ -25,8 +25,6 @@ interface GraphEdge {
 function buildLayout(
   groupId: string,
   interfaces: Interface[],
-  systems: System[],
-  config: RegistryConfig,
   savedPositions: Record<string, { x: number; y: number }>,
 ): { nodes: NodePos[]; edges: GraphEdge[] } {
   const groupIfaces = interfaces
@@ -293,7 +291,7 @@ export default function GroupDiagramSvg() {
   }, [selectedGroupId])
 
   const { nodes, edges } = selectedGroupId
-    ? buildLayout(selectedGroupId, api.interfaces, api.systems, api.config, savedPositions)
+    ? buildLayout(selectedGroupId, api.interfaces, savedPositions)
     : { nodes: [], edges: [] }
 
   // Keep a mutable ref for node positions so drag handlers don't close over stale state
