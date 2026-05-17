@@ -164,6 +164,67 @@ interface Popup {
   receiverName: string
 }
 
+// ── EdgeRefLabels ─────────────────────────────────────────────────────────────
+
+const LABEL_W  = 52   // approx px width of a 10-char ref label at font-size 10
+const LABEL_GAP = 6   // min gap between labels
+
+function EdgeRefLabels({ pts, refs, color, scale }: {
+  pts: Point[]; refs: string[]; color: string; scale: number
+}) {
+  if (!refs.length || pts.length < 2) return null
+
+  // Total path length in canvas units
+  const segs = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y))
+  const total = segs.reduce((s, l) => s + l, 0)
+
+  // How many labels fit on screen at current zoom?
+  const slotPx   = (LABEL_W + LABEL_GAP) / scale   // slot width in canvas units
+  const maxFit   = Math.max(1, Math.floor(total / slotPx))
+  const visible  = refs.slice(0, maxFit)
+  const overflow = refs.length > visible.length
+
+  // Evenly space the visible labels along the path
+  const count  = visible.length + (overflow ? 1 : 0)
+  const step   = total / (count + 1)
+
+  const labels: Array<{ x: number; y: number; text: string }> = []
+
+  for (let li = 0; li < count; li++) {
+    const target = step * (li + 1)
+    const text   = li < visible.length ? visible[li].trim() : '…'
+
+    // Walk path segments to find the point at `target` distance
+    let remaining = target
+    let found = pts[0]
+    for (let si = 0; si < segs.length; si++) {
+      if (remaining <= segs[si]) {
+        const t = remaining / segs[si]
+        found = { x: pts[si].x + t * (pts[si + 1].x - pts[si].x), y: pts[si].y + t * (pts[si + 1].y - pts[si].y) }
+        break
+      }
+      remaining -= segs[si]
+      found = pts[si + 1]
+    }
+    labels.push({ ...found, text })
+  }
+
+  return (
+    <>
+      {labels.map((l, i) => (
+        <g key={i} transform={`translate(${l.x},${l.y})`} style={{ pointerEvents: 'none' }}>
+          <rect x={-(LABEL_W / 2) / scale} y={-9 / scale} width={LABEL_W / scale} height={14 / scale}
+            rx={3 / scale} fill={color} opacity={0.85} />
+          <text textAnchor="middle" dominantBaseline="middle"
+            fontSize={10 / scale} fill="#fff" fontFamily="var(--sapFontFamily)">
+            {l.text}
+          </text>
+        </g>
+      ))}
+    </>
+  )
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const toolBtn: React.CSSProperties = {
@@ -184,6 +245,7 @@ export default function ArchitectureCanvas({ systems, edges, config, onNodeMoved
   const [edgeColors,   setEdgeColors]   = useState<Record<string, string>>(() => loadColors())
   const [popup,        setPopup]        = useState<Popup | null>(null)
   const [colorPickKey, setColorPickKey] = useState<string | null>(null)
+  const [showRefs,     setShowRefs]     = useState(false)
 
   const drag   = useRef<{ id: string; ox: number; oy: number; mx: number; my: number } | null>(null)
   const panRef = useRef<{ mx: number; my: number; px: number; py: number } | null>(null)
@@ -364,6 +426,13 @@ export default function ArchitectureCanvas({ systems, edges, config, onNodeMoved
         >
           {LAYOUT_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
         </select>
+        <button
+          style={{ ...toolBtn, background: showRefs ? '#0070F2' : 'var(--sapTile_Background)', color: showRefs ? 'white' : 'var(--sapTextColor)', borderColor: showRefs ? '#0070F2' : 'var(--sapList_BorderColor)' }}
+          onClick={() => setShowRefs(v => !v)}
+          title="Toggle between count badge and interface refs along edge"
+        >
+          {showRefs ? 'Refs' : 'Count'}
+        </button>
       </div>
 
       {/* SVG canvas */}
@@ -400,18 +469,18 @@ export default function ArchitectureCanvas({ systems, edges, config, onNodeMoved
                   fill="none" stroke={color} strokeWidth={2}
                   style={{ pointerEvents: 'none' }}
                 />
-                {/* Count badge */}
-                <g
-                  transform={`translate(${mid.x},${mid.y})`}
-                  style={{ pointerEvents: 'none' }}
-                >
-                  <rect x={-14} y={-10} width={28} height={20} rx={10}
-                    fill={color} opacity={0.9} />
-                  <text textAnchor="middle" dominantBaseline="middle"
-                    fontSize={11} fill="#fff" fontFamily="var(--sapFontFamily)">
-                    {edge.count}
-                  </text>
-                </g>
+                {/* Count badge or distributed ref labels */}
+                {!showRefs ? (
+                  <g transform={`translate(${mid.x},${mid.y})`} style={{ pointerEvents: 'none' }}>
+                    <rect x={-14} y={-10} width={28} height={20} rx={10} fill={color} opacity={0.9} />
+                    <text textAnchor="middle" dominantBaseline="middle"
+                      fontSize={11} fill="#fff" fontFamily="var(--sapFontFamily)">
+                      {edge.count}
+                    </text>
+                  </g>
+                ) : (
+                  <EdgeRefLabels pts={pts} refs={edge.refs} color={color} scale={scale} />
+                )}
               </g>
             )
           })}

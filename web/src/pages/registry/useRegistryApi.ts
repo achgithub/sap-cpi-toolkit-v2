@@ -47,21 +47,27 @@ export function useRegistryApi() {
     setLoading(true)
     setError('')
     try {
-      const [sRes, gRes, iRes, stRes, itRes, ipRes] = await Promise.all([
+      const [sRes, gRes, iRes, stRes, itRes] = await Promise.all([
         fetch(`${BASE}/systems`),
         fetch(`${BASE}/logical-groups`),
         fetch(`${BASE}/interfaces`),
         fetch(`${BASE}/config/system_types`),
         fetch(`${BASE}/config/infra_types`),
-        fetch(`${BASE}/config/integration_platforms`),
       ])
-      const [s, g, i, st, it, ip] = await Promise.all([
-        sRes.json(), gRes.json(), iRes.json(), stRes.json(), itRes.json(), ipRes.json(),
+      const [s, g, i, st, it] = await Promise.all([
+        sRes.json(), gRes.json(), iRes.json(), stRes.json(), itRes.json(),
       ])
       setSystems(s as System[])
       setLogicalGroups(g as LogicalGroup[])
       setInterfaces(i as Interface[])
-      setConfig(c => ({ ...c, systemTypes: st, infraTypes: it, platforms: (ip as {name:string;color?:string}[]).map(p => ({ ...p, color: p.color ?? '#E65100' })) }))
+
+      // integration_platforms is optional — fall back to default if missing
+      const ipRaw = await fetch(`${BASE}/config/integration_platforms`)
+        .then(r => r.ok ? r.json() : DEFAULT_CONFIG.platforms)
+        .catch(() => DEFAULT_CONFIG.platforms) as { name: string; color?: string }[]
+      const platforms = ipRaw.map(p => ({ ...p, color: p.color ?? '#E65100' }))
+
+      setConfig(c => ({ ...c, systemTypes: st, infraTypes: it, platforms }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
