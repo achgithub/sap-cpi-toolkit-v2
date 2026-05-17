@@ -257,6 +257,13 @@ function buildEdgePaths(
       if (clen > 1) { canon_px = -cdy / clen; canon_py = cdx / clen }
     }
 
+    // Visual rank: 0 = topmost/leftmost arc in the bundle, n-1 = bottommost/rightmost.
+    // Offset increases with i. If the canonical perpendicular points downward (canon_py>0)
+    // or rightward (canon_px>0), i=0 is already top/left so rank = i.
+    // Otherwise reverse so rank 0 is still the top/left arc.
+    const perpDominant = Math.abs(canon_py) >= Math.abs(canon_px) ? canon_py : canon_px
+    const visualRank = (i: number) => perpDominant >= 0 ? i : (n - 1 - i)
+
     let labelIdx = 0
     for (let i = 0; i < n; i++) {
       const e    = group[i]
@@ -299,7 +306,7 @@ function buildEdgePaths(
       // 5-position cycle: arc 1→A, 2→B, 3→C, 4→D, 5→E, 6→A, 7→B …
       // Canonical direction ensures A always means "near node A" for every arc.
       const LABEL_T = [0.1, 0.3, 0.5, 0.7, 0.9]
-      const tCanon  = LABEL_T[labelIdx % LABEL_T.length]
+      const tCanon  = LABEL_T[visualRank(i) % LABEL_T.length]
       const t       = e.fromId === canonicalFromId ? tCanon : 1 - tCanon
       // Label ON the arc: quadratic Bezier at t using the canonical control point.
       // Each arc has a unique offset → unique mx/my → unique Bezier position.
