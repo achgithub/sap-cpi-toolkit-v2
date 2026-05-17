@@ -517,9 +517,10 @@ function StepsPanel({ ifaceId, ifaceRef, onClose }: {
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
-function EdgeContextMenu({ menu, onClose, onShowSteps }: {
+function EdgeContextMenu({ menu, onClose, onShowSteps, onOpenFlowDiagram }: {
   menu: ContextMenu; onClose: () => void
   onShowSteps: (ifaceId: string, ref: string) => void
+  onOpenFlowDiagram?: (ifaceId: string) => void
 }) {
   useEffect(() => {
     const handler = () => onClose()
@@ -571,7 +572,8 @@ function EdgeContextMenu({ menu, onClose, onShowSteps }: {
       <div style={{ padding: '4px 0' }}>
         {menuItem('Open in Registry',  '📋')}
         {menuItem('Interface Summary', '🔍')}
-        {menuItem('Open Flow Diagram', '🗺️')}
+        {menuItem('Open Flow Diagram', '🗺️',
+          onOpenFlowDiagram ? () => { onClose(); onOpenFlowDiagram(menu.ifaceId) } : undefined)}
         {menuItem('Show Steps', '📝', () => { onClose(); onShowSteps(menu.ifaceId, menu.ref) })}
       </div>
     </div>
@@ -612,7 +614,9 @@ function GroupList({ groups, selectedId, onSelect }: {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function GroupDiagramSvg() {
+export default function GroupDiagramSvg({ onOpenFlowDiagram }: {
+  onOpenFlowDiagram?: (ifaceId: string) => void
+}) {
   const api = useRegistryApi()
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [savedPositions,  setSavedPositions]  = useState<Record<string, { x: number; y: number }>>({})
@@ -1019,6 +1023,7 @@ export default function GroupDiagramSvg() {
           menu={contextMenu}
           onClose={() => setContextMenu(null)}
           onShowSteps={(ifaceId, ref) => setStepsPanel({ ifaceId, ref })}
+          onOpenFlowDiagram={onOpenFlowDiagram}
         />
       )}
     </div>

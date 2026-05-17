@@ -219,6 +219,7 @@ export default function DesignPhase() {
   const [archFilter,     setArchFilter]     = useState<DiagramFilter>(emptyFilter())
   const [registryFilter, setRegistryFilter] = useState<{ sender?: string; receiver?: string }>({})
   const [fromArch,       setFromArch]       = useState(false)
+  const [flowIfaceId,    setFlowIfaceId]    = useState<string | undefined>(undefined)
 
   return (
     <PhaseLayout storageKey="v2-design" items={DESIGN_NAV}>
@@ -237,8 +238,15 @@ export default function DesignPhase() {
               }}
             />
           )}
-          {id === 'flow'  && <FlowDiagram />}
-          {id === 'group' && <GroupDiagramSvg />}
+          {id === 'flow'  && <FlowDiagram initialIfaceId={flowIfaceId} />}
+          {id === 'group' && (
+            <GroupDiagramSvg
+              onOpenFlowDiagram={(ifaceId) => {
+                setFlowIfaceId(ifaceId)
+                setId('flow')
+              }}
+            />
+          )}
           {id === 'registry' && (
             <RegistryGrid
               key={`${registryFilter.sender ?? ''}-${registryFilter.receiver ?? ''}`}

@@ -145,7 +145,7 @@ function PanelItem({ label, badge, depth, selected, onClick }: {
 
 // ── FlowDiagram ───────────────────────────────────────────────────────────────
 
-export default function FlowDiagram() {
+export default function FlowDiagram({ initialIfaceId }: { initialIfaceId?: string }) {
   const api = useRegistryApi()
   const [selId, setSelId] = useState<string | null>(null)
   const [state, setState] = useState<FlowDiagramState | null>(null)
@@ -154,6 +154,11 @@ export default function FlowDiagram() {
   const [panelCollapsed, setPanelCollapsed] = useState(false)
 
   useEffect(() => { api.load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (initialIfaceId && api.interfaces.length > 0 && selId !== initialIfaceId) {
+      select(initialIfaceId)
+    }
+  }, [initialIfaceId, api.interfaces]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function select(id: string) {
     setSelId(id)
