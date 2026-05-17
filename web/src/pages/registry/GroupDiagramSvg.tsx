@@ -526,12 +526,14 @@ export default function GroupDiagramSvg() {
   const [saveLabel,   setSaveLabel]   = useState('Save')
   const [pendingFit,  setPendingFit]  = useState(false)
 
-  const containerRef = useRef<HTMLDivElement>(null)
-  const dragRef      = useRef<{ id: string; ox: number; oy: number; mx: number; my: number } | null>(null)
-  const panRef       = useRef<{ mx: number; my: number; px: number; py: number } | null>(null)
-  const posRef       = useRef<Record<string, { x: number; y: number }>>({})
+  const containerRef  = useRef<HTMLDivElement>(null)
+  const dragRef       = useRef<{ id: string; ox: number; oy: number; mx: number; my: number } | null>(null)
+  const panRef        = useRef<{ mx: number; my: number; px: number; py: number } | null>(null)
+  const posRef        = useRef<Record<string, { x: number; y: number }>>({})
+  const panZoomRef    = useRef({ pan: { x: 40, y: 40 }, zoom: 1 })
 
   useEffect(() => { api.load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { panZoomRef.current = { pan, zoom } }, [pan, zoom])
 
   // Load saved positions when group changes
   useEffect(() => {
@@ -544,10 +546,12 @@ export default function GroupDiagramSvg() {
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.groupViz?.nodes?.length) {
-          // Saved layout exists — restore it, no auto-fit
+          // Saved layout exists — restore nodes, pan, and zoom
           const pos: Record<string, { x: number; y: number }> = {}
           for (const n of data.groupViz.nodes) pos[n.id] = { x: n.x, y: n.y }
           setSavedPositions(pos)
+          if (data.groupViz.pan)  setPan(data.groupViz.pan)
+          if (data.groupViz.zoom) setZoom(data.groupViz.zoom)
         } else {
           // Fresh layout — auto-fit once nodePositions have settled
           setPendingFit(true)
@@ -654,7 +658,7 @@ export default function GroupDiagramSvg() {
     fetch(`${BASE}/logical-groups/${selectedGroupId}/flow-diagram`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupViz: { nodes } }),
+      body: JSON.stringify({ groupViz: { nodes, pan: panZoomRef.current.pan, zoom: panZoomRef.current.zoom } }),
     }).then(() => {
       if (showFeedback) {
         setSaveLabel('Saved ✓')
