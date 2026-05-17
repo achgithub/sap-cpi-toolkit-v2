@@ -663,7 +663,7 @@ export default function RegistryGrid({ initialSenderSystemId, initialReceiverSys
               onClick={onBack}
               style={{ ...btnStyle('default'), display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}
             >
-              ← Architecture
+              ← Back
             </button>
           )}
           <input

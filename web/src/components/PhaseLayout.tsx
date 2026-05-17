@@ -10,10 +10,11 @@ export interface PhaseNavItem {
 interface Props {
   storageKey: string
   items: PhaseNavItem[]
+  onTabChange?: (id: string) => void
   children: (activeId: string, setActiveId: (id: string) => void) => ReactNode
 }
 
-export default function PhaseLayout({ storageKey, items, children }: Props) {
+export default function PhaseLayout({ storageKey, items, onTabChange, children }: Props) {
   const collapseKey = storageKey + '-collapsed'
   const [activeId,  setActiveId]  = useState(localStorage.getItem(storageKey) ?? items[0]?.id ?? '')
   const [collapsed, setCollapsed] = useState(localStorage.getItem(collapseKey) === 'true')
@@ -21,6 +22,7 @@ export default function PhaseLayout({ storageKey, items, children }: Props) {
   function select(id: string) {
     setActiveId(id)
     localStorage.setItem(storageKey, id)
+    onTabChange?.(id)
   }
 
   function toggleCollapsed() {

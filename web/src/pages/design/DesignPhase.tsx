@@ -225,8 +225,13 @@ export default function DesignPhase() {
   const [fromGroup,      setFromGroup]      = useState(false)
   const [fromGroupId,    setFromGroupId]    = useState<string | undefined>(undefined)
 
+  function onTabChange(id: string) {
+    if (id !== 'registry') { setFromArch(false); setFromGroupReg(false); setRegIfaceId(undefined) }
+    if (id !== 'flow')     { setFromGroup(false) }
+  }
+
   return (
-    <PhaseLayout storageKey="v2-design" items={DESIGN_NAV}>
+    <PhaseLayout storageKey="v2-design" items={DESIGN_NAV} onTabChange={onTabChange}>
       {(id, setId) => (
         <>
           {id === 'projects'     && <ProjectsSection />}
