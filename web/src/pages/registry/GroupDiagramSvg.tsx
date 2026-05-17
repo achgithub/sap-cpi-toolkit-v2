@@ -9,9 +9,9 @@ const NODE_H      = 100
 const HOP_W       = 120
 const HOP_H       = 40
 const ACCENT_H    = 6
-const MIN_LABEL_PX = 100   // screen px straight-line distance needed to show ref label
-const OFFSET_STEP     = 55   // ideal canvas px between parallel arcs
-const MAX_HALF_SPREAD = 110  // max px from centre to outermost arc
+const MIN_LABEL_PX    = 100  // screen px straight-line distance needed to show ref label
+const OFFSET_STEP     = 40   // ideal canvas px between parallel arcs
+const MAX_HALF_SPREAD = 220  // max px from centre to outermost arc
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -231,10 +231,13 @@ function buildEdgePaths(
 
   const paths: EdgePath[] = []
 
-  for (const group of groups.values()) {
+  for (const [key, group] of groups.entries()) {
     const n = group.length
-    // Label position index counts only labelled edges so routing-only edges
-    // don't consume a slot and leave gaps in the 5-position cycle
+    // The undirected key is "idA↔idB" where idA < idB alphabetically.
+    // canonicalFromId is always idA, so t=0.1 means "near idA" for every
+    // arc in this group regardless of which direction the arc flows.
+    const canonicalFromId = key.split('↔')[0]
+
     let labelIdx = 0
     for (let i = 0; i < n; i++) {
       const e    = group[i]
@@ -277,10 +280,11 @@ function buildEdgePaths(
       // and the cycle repeats every 5, so same-position labels are always
       // one arc apart — evenly distributed for both vertical and horizontal.
       const LABEL_T = [0.1, 0.3, 0.5, 0.7, 0.9]
-      const t  = LABEL_T[labelIdx % LABEL_T.length]
-      // Use chord interpolation (not Bezier) so the label stays between the two
-      // endpoint nodes. The Bezier midpoint can wander far from the chord when
-      // arcs are long, placing labels visually inside another pair's arc bundle.
+      const tCanon = LABEL_T[labelIdx % LABEL_T.length]
+      // Flip t for arcs going opposite to canonical direction so every label
+      // slot maps to the same screen position across all arcs in the bundle.
+      // e.g. slot 0 (t=0.1) always lands near canonicalFromId for all 12 arcs.
+      const t  = e.fromId === canonicalFromId ? tCanon : 1 - tCanon
       const lx = (1-t)*p1.x + t*p2.x
       const ly = (1-t)*p1.y + t*p2.y
 
