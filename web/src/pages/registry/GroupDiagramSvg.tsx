@@ -263,11 +263,13 @@ function buildEdgePaths(
 
       const d = `M ${p1.x} ${p1.y} Q ${mx} ${my} ${p2.x} ${p2.y}`
 
-      // Cycle labels through 4 positions along the arc: left, left-centre,
-      // right-centre, right — then repeat. Works for both vertical and
-      // horizontal pairs without any orientation detection.
-      const LABEL_T = [0.2, 0.38, 0.62, 0.8]
-      const t  = LABEL_T[i % LABEL_T.length]
+      // For ≤4 edges: use the explicit 4-zone positions (left, left-centre,
+      // right-centre, right). For >4 edges, distribute n unique positions
+      // evenly across the arc so no two arcs share the same label position.
+      const LABEL_4 = [0.2, 0.38, 0.62, 0.8]
+      const t  = n <= 4
+        ? LABEL_4[i]
+        : 0.15 + (i / (n - 1)) * 0.7
       const lx = (1-t)*(1-t)*p1.x + 2*t*(1-t)*mx + t*t*p2.x
       const ly = (1-t)*(1-t)*p1.y + 2*t*(1-t)*my + t*t*p2.y
 
