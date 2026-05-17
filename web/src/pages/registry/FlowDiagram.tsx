@@ -190,9 +190,24 @@ export default function FlowDiagram() {
 
   function reseed() {
     if (!selId) return
-    if (!window.confirm('Regenerate layout from interface data? This will discard your current diagram.')) return
+    if (!window.confirm('Regenerate layout from interface data? Node positions will reset but steps will be preserved.')) return
     const iface = api.interfaces.find(i => i.id === selId)
-    if (iface) setState(buildInterfaceState(iface, api.systems))
+    if (!iface) return
+
+    // Preserve steps from current nodes, keyed by nodeKey
+    const stepsMap = new Map<string, NonNullable<FlowNode['steps']>>()
+    for (const node of (state?.nodes ?? [])) {
+      if (node.nodeKey && node.steps?.length) stepsMap.set(node.nodeKey, node.steps)
+    }
+
+    const fresh = buildInterfaceState(iface, api.systems)
+    if (stepsMap.size > 0) {
+      fresh.nodes = fresh.nodes.map(n => {
+        const steps = n.nodeKey ? stepsMap.get(n.nodeKey) : undefined
+        return steps?.length ? { ...n, steps } : n
+      })
+    }
+    setState(fresh)
   }
 
   const grouped   = api.logicalGroups.map(g => ({ group: g, ifaces: api.interfaces.filter(i => i.logical_group_id === g.id) }))

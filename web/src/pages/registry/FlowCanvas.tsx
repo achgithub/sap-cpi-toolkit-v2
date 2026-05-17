@@ -49,8 +49,8 @@ export interface FlowDiagramState {
 const GRID = 10
 
 export const FLOW_DEFAULTS: Record<FlowNodeType, { w: number; h: number; color: string; fs: number }> = {
-  system:   { w: 160, h: 80,  color: '#1565C0', fs: 13 },
-  hop:      { w: 160, h: 80,  color: '#E65100', fs: 13 },
+  system:   { w: 160, h: 100, color: '#1565C0', fs: 13 },
+  hop:      { w: 160, h: 100, color: '#E65100', fs: 13 },
   step:     { w: 160, h: 44,  color: '#880E4F', fs: 12 },
   text:     { w: 120, h: 28,  color: '#222222', fs: 14 },
   boundary: { w: 2,   h: 800, color: '#777777', fs: 12 },
@@ -105,7 +105,8 @@ const DIR_STYLE: Record<ResizeDir, React.CSSProperties> = {
 
 // ── NodeBox ───────────────────────────────────────────────────────────────────
 
-const HEADER_H = 36
+const ACCENT_H  = 6   // colored top bar (matches Architecture tab)
+const LABEL_H   = 30  // system name row
 const ADD_STEP_H = 24
 
 interface NodeBoxProps {
@@ -217,12 +218,11 @@ function NodeBox({ node, selected, editing, onMouseDown, onDoubleClick, onLabelS
     )
   }
 
-  // ── System / Hop (card style with inline steps) ───────────────────────────
+  // ── System / Hop (Architecture-style card with inline steps) ────────────────
 
   const steps = node.steps ?? []
-  const minH = HEADER_H + steps.length * STEP_ROW_H + (selected ? ADD_STEP_H : 0)
+  const minH = ACCENT_H + LABEL_H + steps.length * STEP_ROW_H + (selected ? ADD_STEP_H : 0)
   const boxH = Math.max(node.height, minH)
-  const radius = node.type === 'hop' ? 8 : 4
 
   function addStep(e: React.MouseEvent) {
     e.stopPropagation()
@@ -239,6 +239,16 @@ function NodeBox({ node, selected, editing, onMouseDown, onDoubleClick, onLabelS
     onStepsChange(updated)
   }
 
+  function moveStep(e: React.MouseEvent, stepId: string, dir: 1 | -1) {
+    e.stopPropagation()
+    const idx = steps.findIndex(s => s.id === stepId)
+    const newIdx = idx + dir
+    if (newIdx < 0 || newIdx >= steps.length) return
+    const updated = [...steps]
+    ;[updated[idx], updated[newIdx]] = [updated[newIdx], updated[idx]]
+    onStepsChange(updated.map((s, i) => ({ ...s, num: i + 1 })))
+  }
+
   function startEditStep(e: React.MouseEvent, step: FlowStep) {
     e.stopPropagation()
     setEditingStep(step.id)
@@ -251,21 +261,30 @@ function NodeBox({ node, selected, editing, onMouseDown, onDoubleClick, onLabelS
     setEditingStep(null)
   }
 
+  const arrowBtn: React.CSSProperties = {
+    fontSize: '0.6rem', lineHeight: 1, padding: '1px 2px',
+    background: 'transparent', border: 'none', cursor: 'pointer',
+    color: '#aaa', flexShrink: 0, display: 'flex', alignItems: 'center',
+  }
+
   return (
     <div
       style={{
         position: 'absolute', left: node.x, top: node.y, width: node.width, height: boxH,
-        border: selected ? '2px solid #0070F2' : '1.5px solid rgba(0,0,0,0.18)',
-        borderRadius: radius, cursor: 'move', userSelect: 'none', boxSizing: 'border-box',
-        overflow: 'hidden', background: '#fff',
-        boxShadow: selected ? '0 0 0 2px #0070F240' : '0 1px 4px rgba(0,0,0,0.12)',
+        border: `1.5px solid ${selected ? '#0070F2' : node.color}`,
+        borderRadius: 6, cursor: 'move', userSelect: 'none', boxSizing: 'border-box',
+        overflow: 'hidden', background: 'var(--sapTile_Background)',
+        boxShadow: selected ? `0 0 0 2px #0070F240, 0 2px 8px rgba(0,0,0,0.15)` : '0 2px 8px rgba(0,0,0,0.15)',
       }}
       onMouseDown={onMouseDown}
     >
-      {/* Colored header bar */}
+      {/* Colored top accent bar (matches Architecture tab) */}
+      <div style={{ height: ACCENT_H, background: node.color }} />
+
+      {/* Label row — double-click to edit */}
       <div
         style={{
-          background: node.color, height: HEADER_H, display: 'flex', alignItems: 'center',
+          height: LABEL_H, display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: '0 8px', cursor: 'move',
         }}
         onDoubleClick={onDoubleClick}
@@ -274,49 +293,58 @@ function NodeBox({ node, selected, editing, onMouseDown, onDoubleClick, onLabelS
           ? <input autoFocus value={draft} onChange={e => setDraft(e.target.value)}
               onBlur={() => onLabelSave(draft)}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onLabelSave(draft) } }}
-              style={{ fontSize: node.fontSize, border: 'none', background: 'transparent', outline: 'none', color: 'white', fontFamily: 'var(--sapFontFamily)', fontWeight: 'bold', width: '100%' }} />
-          : <span style={{ fontSize: node.fontSize, fontFamily: 'var(--sapFontFamily)', color: 'white', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.label}</span>
+              style={{ fontSize: node.fontSize, border: 'none', background: 'transparent', outline: 'none', color: 'var(--sapTextColor)', fontFamily: 'var(--sapFontFamily)', fontWeight: 'bold', width: '100%', textAlign: 'center' }} />
+          : <span style={{ fontSize: node.fontSize, fontFamily: 'var(--sapFontFamily)', color: 'var(--sapTextColor)', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>{node.label}</span>
         }
       </div>
 
       {/* Step rows */}
-      {steps.map(step => (
+      {steps.map((step, idx) => (
         <div key={step.id}
           style={{
             height: STEP_ROW_H, display: 'flex', alignItems: 'center',
-            borderBottom: '1px solid #eee', padding: '0 6px', gap: 4,
+            borderTop: '1px solid var(--sapList_BorderColor)', padding: '0 4px', gap: 2,
             background: step.ifaceColor ? step.ifaceColor + '18' : 'transparent',
           }}
         >
-          <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: step.ifaceColor ?? node.color, fontWeight: 'bold', minWidth: 16, textAlign: 'center', flexShrink: 0 }}>
+          {/* Number badge */}
+          <span style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'white', background: step.ifaceColor ?? node.color, borderRadius: 3, minWidth: 16, textAlign: 'center', padding: '0 2px', flexShrink: 0, fontWeight: 'bold' }}>
             {step.num}
           </span>
+
+          {/* Step text */}
           {editingStep === step.id
             ? <input autoFocus value={stepDraft} onChange={e => setStepDraft(e.target.value)}
                 onBlur={() => saveStep(step.id)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveStep(step.id) } }}
                 onClick={e => e.stopPropagation()}
-                style={{ flex: 1, fontSize: '0.72rem', border: 'none', outline: '1px solid #0070F2', fontFamily: 'var(--sapFontFamily)', borderRadius: 2, padding: '1px 4px' }} />
+                style={{ flex: 1, fontSize: '0.72rem', border: 'none', outline: '1px solid #0070F2', fontFamily: 'var(--sapFontFamily)', borderRadius: 2, padding: '1px 4px', background: 'white' }} />
             : <span
-                style={{ flex: 1, fontSize: '0.72rem', fontFamily: 'var(--sapFontFamily)', color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text' }}
+                style={{ flex: 1, fontSize: '0.72rem', fontFamily: 'var(--sapFontFamily)', color: 'var(--sapTextColor)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text' }}
                 onDoubleClick={e => startEditStep(e, step)}
               >{step.text}</span>
           }
+
+          {/* ifaceRef badge (group view) */}
           {step.ifaceRef && (
-            <span style={{ fontFamily: 'monospace', fontSize: '0.65rem', color: step.ifaceColor ?? '#777', border: `1px solid ${step.ifaceColor ?? '#ccc'}`, borderRadius: 3, padding: '0 3px', flexShrink: 0 }}>
+            <span style={{ fontFamily: 'monospace', fontSize: '0.62rem', color: step.ifaceColor ?? '#777', border: `1px solid ${step.ifaceColor ?? '#ccc'}`, borderRadius: 3, padding: '0 3px', flexShrink: 0 }}>
               {step.ifaceRef}
             </span>
           )}
-          {selected && !step.ifaceRef && (
+
+          {/* Reorder + delete (only when selected and not a group-aggregated step) */}
+          {selected && !step.ifaceRef && (<>
+            <button style={arrowBtn} onClick={e => moveStep(e, step.id, -1)} title="Move up" disabled={idx === 0}>▲</button>
+            <button style={arrowBtn} onClick={e => moveStep(e, step.id,  1)} title="Move down" disabled={idx === steps.length - 1}>▼</button>
             <button onClick={e => deleteStep(e, step.id)}
-              style={{ fontSize: '0.7rem', lineHeight: 1, padding: '0 3px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#999', flexShrink: 0 }}>×</button>
-          )}
+              style={{ ...arrowBtn, fontSize: '0.72rem', padding: '0 3px' }}>×</button>
+          </>)}
         </div>
       ))}
 
       {/* Add step row */}
       {selected && (
-        <div style={{ height: ADD_STEP_H, display: 'flex', alignItems: 'center', padding: '0 8px' }}>
+        <div style={{ height: ADD_STEP_H, display: 'flex', alignItems: 'center', padding: '0 8px', borderTop: steps.length > 0 ? '1px solid var(--sapList_BorderColor)' : 'none' }}>
           <button onClick={addStep}
             style={{ fontSize: '0.72rem', color: node.color, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'var(--sapFontFamily)' }}>
             + Step
@@ -325,7 +353,7 @@ function NodeBox({ node, selected, editing, onMouseDown, onDoubleClick, onLabelS
       )}
 
       {selected && RESIZE_DIRS.map(dir => (
-        <div key={dir} style={{ position: 'absolute', width: 8, height: 8, background: 'white', border: '1.5px solid #0070F2', borderRadius: 2, zIndex: 10, ...DIR_STYLE[dir] }}
+        <div key={dir} style={{ position: 'absolute', width: 8, height: 8, background: 'var(--sapTile_Background)', border: '1.5px solid #0070F2', borderRadius: 2, zIndex: 10, ...DIR_STYLE[dir] }}
           onMouseDown={e => { e.stopPropagation(); onResizeMouseDown(e, dir) }} />
       ))}
     </div>
