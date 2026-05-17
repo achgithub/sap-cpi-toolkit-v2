@@ -219,6 +219,8 @@ export default function DesignPhase() {
   const [archFilter,     setArchFilter]     = useState<DiagramFilter>(emptyFilter())
   const [registryFilter, setRegistryFilter] = useState<{ sender?: string; receiver?: string }>({})
   const [fromArch,       setFromArch]       = useState(false)
+  const [fromGroupReg,   setFromGroupReg]   = useState(false)
+  const [regIfaceId,     setRegIfaceId]     = useState<string | undefined>(undefined)
   const [flowIfaceId,    setFlowIfaceId]    = useState<string | undefined>(undefined)
   const [fromGroup,      setFromGroup]      = useState(false)
   const [fromGroupId,    setFromGroupId]    = useState<string | undefined>(undefined)
@@ -255,14 +257,25 @@ export default function DesignPhase() {
                 setFromGroup(true)
                 setId('flow')
               }}
+              onOpenRegistry={(ifaceId, groupId) => {
+                setRegIfaceId(ifaceId)
+                setFromGroupId(groupId)
+                setFromGroupReg(true)
+                setId('registry')
+              }}
             />
           )}
           {id === 'registry' && (
             <RegistryGrid
-              key={`${registryFilter.sender ?? ''}-${registryFilter.receiver ?? ''}`}
+              key={`${registryFilter.sender ?? ''}-${registryFilter.receiver ?? ''}-${regIfaceId ?? ''}`}
               initialSenderSystemId={registryFilter.sender}
               initialReceiverSystemId={registryFilter.receiver}
-              onBack={fromArch ? () => { setFromArch(false); setId('architecture') } : undefined}
+              initialIfaceId={regIfaceId}
+              onBack={
+                fromArch    ? () => { setFromArch(false);    setId('architecture') } :
+                fromGroupReg ? () => { setFromGroupReg(false); setRegIfaceId(undefined); setId('group') } :
+                undefined
+              }
             />
           )}
           {id === 'systems' && <SystemView />}

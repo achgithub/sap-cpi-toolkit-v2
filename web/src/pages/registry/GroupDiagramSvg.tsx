@@ -518,10 +518,11 @@ function StepsPanel({ ifaceId, ifaceRef, onClose }: {
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
-function EdgeContextMenu({ menu, onClose, onShowSteps, onOpenFlowDiagram }: {
+function EdgeContextMenu({ menu, onClose, onShowSteps, onOpenFlowDiagram, onOpenRegistry }: {
   menu: ContextMenu; onClose: () => void
   onShowSteps: (ifaceId: string, ref: string) => void
   onOpenFlowDiagram?: (ifaceId: string, groupId: string) => void
+  onOpenRegistry?:    (ifaceId: string, groupId: string) => void
 }) {
   useEffect(() => {
     const handler = () => onClose()
@@ -571,8 +572,8 @@ function EdgeContextMenu({ menu, onClose, onShowSteps, onOpenFlowDiagram }: {
         </span>
       </div>
       <div style={{ padding: '4px 0' }}>
-        {menuItem('Open in Registry',  '📋')}
-        {menuItem('Interface Summary', '🔍')}
+        {menuItem('Open in Registry', '📋',
+          onOpenRegistry ? () => { onClose(); onOpenRegistry(menu.ifaceId, menu.groupId) } : undefined)}
         {menuItem('Open Flow Diagram', '🗺️',
           onOpenFlowDiagram ? () => { onClose(); onOpenFlowDiagram(menu.ifaceId, menu.groupId) } : undefined)}
         {menuItem('Show Steps', '📝', () => { onClose(); onShowSteps(menu.ifaceId, menu.ref) })}
@@ -615,8 +616,9 @@ function GroupList({ groups, selectedId, onSelect }: {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function GroupDiagramSvg({ onOpenFlowDiagram, initialGroupId }: {
+export default function GroupDiagramSvg({ onOpenFlowDiagram, onOpenRegistry, initialGroupId }: {
   onOpenFlowDiagram?: (ifaceId: string, groupId: string) => void
+  onOpenRegistry?:    (ifaceId: string, groupId: string) => void
   initialGroupId?: string
 }) {
   const api = useRegistryApi()
@@ -1027,6 +1029,7 @@ export default function GroupDiagramSvg({ onOpenFlowDiagram, initialGroupId }: {
           onClose={() => setContextMenu(null)}
           onShowSteps={(ifaceId, ref) => setStepsPanel({ ifaceId, ref })}
           onOpenFlowDiagram={onOpenFlowDiagram}
+          onOpenRegistry={onOpenRegistry}
         />
       )}
     </div>

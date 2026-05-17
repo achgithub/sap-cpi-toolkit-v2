@@ -6,6 +6,7 @@ import { STATUS_COLORS, TYPE_LABELS, STATUSES, INTERFACE_TYPES, TRANSPORTS, AUTH
 interface Props {
   initialSenderSystemId?:   string
   initialReceiverSystemId?: string
+  initialIfaceId?:          string
   onBack?: () => void
 }
 
@@ -588,7 +589,7 @@ function InterfaceRow({ iface, systems, selected, onClick }: { iface: Interface;
   const senderName = systems.find(s => s.id === iface.sender_system_id)?.name ?? '—'
   const receivers  = iface.receivers.map(r => systems.find(s => s.id === r.system_id)?.name).filter(Boolean).join(', ') || '—'
   return (
-    <div onClick={onClick} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 140px 80px 90px', gap: '0 12px', padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--sapList_BorderColor)', background: selected ? 'var(--sapList_SelectionBackgroundColor)' : 'transparent', alignItems: 'center' }}>
+    <div onClick={onClick} data-iface-id={iface.id} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 140px 80px 90px', gap: '0 12px', padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--sapList_BorderColor)', background: selected ? 'var(--sapList_SelectionBackgroundColor)' : 'transparent', alignItems: 'center' }}>
       <code style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)' }}>{iface.ref}</code>
       <div style={{ overflow: 'hidden' }}>
         <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--sapTextColor)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{iface.name}</div>
@@ -604,9 +605,9 @@ function InterfaceRow({ iface, systems, selected, onClick }: { iface: Interface;
 
 // ── Registry Grid ─────────────────────────────────────────────────────────────
 
-export default function RegistryGrid({ initialSenderSystemId, initialReceiverSystemId, onBack }: Props) {
+export default function RegistryGrid({ initialSenderSystemId, initialReceiverSystemId, initialIfaceId, onBack }: Props) {
   const api = useRegistryApi()
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(initialIfaceId ?? null)
   const [creating,   setCreating]   = useState(false)
   const [search,     setSearch]     = useState('')
   const [statuses,   setStatuses]   = useState<string[]>([])
@@ -618,6 +619,11 @@ export default function RegistryGrid({ initialSenderSystemId, initialReceiverSys
   )
 
   useEffect(() => { api.load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!initialIfaceId) return
+    const el = document.querySelector(`[data-iface-id="${initialIfaceId}"]`)
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [initialIfaceId, api.interfaces]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     let list = api.interfaces
