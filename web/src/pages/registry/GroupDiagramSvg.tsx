@@ -299,16 +299,16 @@ function buildEdgePaths(
 
       const d = `M ${p1.x} ${p1.y} Q ${mx} ${my} ${p2.x} ${p2.y}`
 
-      // 5 evenly-spaced positions, assigned sequentially: arc 1→A, 2→B,
-      // 3→C, 4→D, 5→E, 6→A … Label from one arc reaches ~4 arcs wide,
-      // and the cycle repeats every 5, so same-position labels are always
-      // one arc apart — evenly distributed for both vertical and horizontal.
-      // 5-position cycle: arc 1→A, 2→B, 3→C, 4→D, 5→E, 6→A, 7→B …
-      // Canonical direction ensures A always means "near node A" for every arc.
-      // n=1: always centre — no staggering needed for a single arc.
-      // n>1: 5 positions centred around the midpoint; position A is left-of-centre.
-      const LABEL_T = [0.2, 0.35, 0.5, 0.65, 0.8]
-      const tCanon  = n === 1 ? 0.5 : LABEL_T[visualRank(i) % LABEL_T.length]
+      // Label position along the arc (canonical direction):
+      //   n=1  → always 0.5 (centre, no staggering needed)
+      //   n≤5  → evenly space n points across [0.2, 0.8], always centred+symmetric
+      //           e.g. n=3 → [0.2, 0.5, 0.8]  (not [0.2, 0.35, 0.5] which bunches left)
+      //   n>5  → cycle through fixed 5 positions [0.2, 0.35, 0.5, 0.65, 0.8]
+      const LABEL_T5 = [0.2, 0.35, 0.5, 0.65, 0.8]
+      const vr      = visualRank(i)
+      const tCanon  = n === 1 ? 0.5
+        : n <= 5    ? 0.2 + 0.6 * (vr % n) / (n - 1)
+        :             LABEL_T5[vr % 5]
       const t       = e.fromId === canonicalFromId ? tCanon : 1 - tCanon
       // Label ON the arc: quadratic Bezier at t using the canonical control point.
       // Each arc has a unique offset → unique mx/my → unique Bezier position.
