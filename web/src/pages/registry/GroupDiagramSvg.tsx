@@ -307,7 +307,7 @@ function buildEdgePaths(
       // Canonical direction ensures A always means "near node A" for every arc.
       // n=1: always centre — no staggering needed for a single arc.
       // n>1: 5 positions centred around the midpoint; position A is left-of-centre.
-      const LABEL_T = [0.3, 0.4, 0.5, 0.6, 0.7]
+      const LABEL_T = [0.2, 0.35, 0.5, 0.65, 0.8]
       const tCanon  = n === 1 ? 0.5 : LABEL_T[visualRank(i) % LABEL_T.length]
       const t       = e.fromId === canonicalFromId ? tCanon : 1 - tCanon
       // Label ON the arc: quadratic Bezier at t using the canonical control point.
