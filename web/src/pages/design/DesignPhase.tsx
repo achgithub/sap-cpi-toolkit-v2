@@ -220,6 +220,7 @@ export default function DesignPhase() {
   const [registryFilter, setRegistryFilter] = useState<{ sender?: string; receiver?: string }>({})
   const [fromArch,       setFromArch]       = useState(false)
   const [flowIfaceId,    setFlowIfaceId]    = useState<string | undefined>(undefined)
+  const [fromGroup,      setFromGroup]      = useState(false)
 
   return (
     <PhaseLayout storageKey="v2-design" items={DESIGN_NAV}>
@@ -238,11 +239,17 @@ export default function DesignPhase() {
               }}
             />
           )}
-          {id === 'flow'  && <FlowDiagram initialIfaceId={flowIfaceId} />}
+          {id === 'flow'  && (
+            <FlowDiagram
+              initialIfaceId={flowIfaceId}
+              onBack={fromGroup ? () => { setFromGroup(false); setId('group') } : undefined}
+            />
+          )}
           {id === 'group' && (
             <GroupDiagramSvg
               onOpenFlowDiagram={(ifaceId) => {
                 setFlowIfaceId(ifaceId)
+                setFromGroup(true)
                 setId('flow')
               }}
             />

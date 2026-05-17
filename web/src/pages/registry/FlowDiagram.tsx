@@ -145,7 +145,7 @@ function PanelItem({ label, badge, depth, selected, onClick }: {
 
 // ── FlowDiagram ───────────────────────────────────────────────────────────────
 
-export default function FlowDiagram({ initialIfaceId }: { initialIfaceId?: string }) {
+export default function FlowDiagram({ initialIfaceId, onBack }: { initialIfaceId?: string; onBack?: () => void }) {
   const api = useRegistryApi()
   const [selId, setSelId] = useState<string | null>(null)
   const [state, setState] = useState<FlowDiagramState | null>(null)
@@ -234,9 +234,18 @@ export default function FlowDiagram({ initialIfaceId }: { initialIfaceId?: strin
           background: 'var(--sapGroup_TitleBackground)',
         }}>
           {!panelCollapsed && (
-            <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--sapTextColor)' }}>
-              Flow Diagrams
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {onBack && (
+                <button onClick={onBack} style={{
+                  background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
+                  fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem',
+                  color: '#0070F2', borderRadius: 3,
+                }}>← Back</button>
+              )}
+              <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--sapTextColor)' }}>
+                Flow Diagrams
+              </span>
+            </div>
           )}
           <button
             onClick={() => setPanelCollapsed(c => !c)}
