@@ -20,10 +20,11 @@ func New(pool *pgxpool.Pool, log *slog.Logger) *Handler {
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	// Systems (company-wide)
-	mux.HandleFunc("GET /systems",         h.listSystems)
-	mux.HandleFunc("POST /systems",        h.createSystem)
-	mux.HandleFunc("PUT /systems/{id}",    h.updateSystem)
-	mux.HandleFunc("DELETE /systems/{id}", h.deleteSystem)
+	mux.HandleFunc("GET /systems",                  h.listSystems)
+	mux.HandleFunc("POST /systems",                 h.createSystem)
+	mux.HandleFunc("PUT /systems/{id}",             h.updateSystem)
+	mux.HandleFunc("POST /systems/{id}/archive",    h.archiveSystem)
+	mux.HandleFunc("POST /systems/{id}/unarchive",  h.unarchiveSystem)
 
 	// Logical groups
 	mux.HandleFunc("GET /logical-groups",          h.listLogicalGroups)
@@ -60,6 +61,49 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// Registry config
 	mux.HandleFunc("GET /config/{key}", h.getConfig)
 	mux.HandleFunc("PUT /config/{key}", h.putConfig)
+
+	// ── V2 routes — new schema, coexists with v1 ──────────────────────────────
+
+	// Integration components
+	mux.HandleFunc("GET /v2/components",                   h.listComponents)
+	mux.HandleFunc("POST /v2/components",                  h.createComponent)
+	mux.HandleFunc("PUT /v2/components/{id}",              h.updateComponent)
+	mux.HandleFunc("POST /v2/components/{id}/archive",     h.archiveComponent)
+	mux.HandleFunc("POST /v2/components/{id}/unarchive",   h.unarchiveComponent)
+
+	// Interfaces v2
+	mux.HandleFunc("GET /v2/interfaces",                   h.listInterfacesV2)
+	mux.HandleFunc("POST /v2/interfaces",                  h.createInterfaceV2)
+	mux.HandleFunc("GET /v2/interfaces/{id}",              h.getInterfaceV2)
+	mux.HandleFunc("PUT /v2/interfaces/{id}",              h.updateInterfaceV2)
+	mux.HandleFunc("POST /v2/interfaces/{id}/archive",     h.archiveInterfaceV2)
+	mux.HandleFunc("POST /v2/interfaces/{id}/unarchive",   h.unarchiveInterfaceV2)
+
+	// Receivers v2
+	mux.HandleFunc("POST /v2/interfaces/{id}/receivers",         h.addReceiverV2)
+	mux.HandleFunc("PUT /v2/interfaces/{id}/receivers/{rid}",    h.updateReceiverV2)
+	mux.HandleFunc("DELETE /v2/interfaces/{id}/receivers/{rid}", h.deleteReceiverV2)
+
+	// Dependencies v2
+	mux.HandleFunc("GET /v2/interfaces/{id}/dependencies",          h.listDependenciesV2)
+	mux.HandleFunc("POST /v2/interfaces/{id}/dependencies",         h.addDependencyV2)
+	mux.HandleFunc("DELETE /v2/interfaces/{id}/dependencies/{did}", h.deleteDependencyV2)
+
+	// Custom field definitions
+	mux.HandleFunc("GET /v2/field-definitions",         h.listFieldDefs)
+	mux.HandleFunc("POST /v2/field-definitions",        h.createFieldDef)
+	mux.HandleFunc("PUT /v2/field-definitions/{id}",    h.updateFieldDef)
+	mux.HandleFunc("DELETE /v2/field-definitions/{id}", h.deleteFieldDef)
+
+	// Interface field values
+	mux.HandleFunc("GET /v2/interfaces/{id}/fields",                        h.getInterfaceFields)
+	mux.HandleFunc("PUT /v2/interfaces/{id}/fields",                        h.putInterfaceFields)
+	mux.HandleFunc("GET /v2/interfaces/{id}/receivers/{rid}/fields",        h.getReceiverFields)
+	mux.HandleFunc("PUT /v2/interfaces/{id}/receivers/{rid}/fields",        h.putReceiverFields)
+
+	// Flow diagram v2
+	mux.HandleFunc("GET /v2/interfaces/{id}/flow-diagram", h.getInterfaceV2FlowDiagram)
+	mux.HandleFunc("PUT /v2/interfaces/{id}/flow-diagram", h.putInterfaceV2FlowDiagram)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

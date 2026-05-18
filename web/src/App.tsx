@@ -1,10 +1,7 @@
 import { useState } from 'react'
 import {
-  ShellBar,
-  Avatar,
-  FlexBox,
-  FlexBoxDirection,
-  Button,
+  ShellBar, Avatar, FlexBox, FlexBoxDirection,
+  Button, Dialog, Bar,
 } from '@ui5/webcomponents-react'
 import DesignPhase from './pages/design/DesignPhase'
 import DevelopPhase from './pages/develop/DevelopPhase'
@@ -14,7 +11,6 @@ import ToolboxPanel, { type ToolID } from './components/ToolboxPanel'
 import SettingsDialog from './components/SettingsDialog'
 import ContextBar from './components/ContextBar'
 import { WorkspaceProvider, useClipboard } from './context/WorkspaceContext'
-import { Dialog, Bar, Button as Btn } from '@ui5/webcomponents-react'
 import Formatter from './tools/Formatter'
 import Security from './tools/Security'
 import GroovyIDE from './tools/GroovyIDE'
@@ -26,9 +22,62 @@ import CloudConnector from './tools/CloudConnector'
 import EDITools from './tools/EDITools'
 import MockServer from './tools/MockServer'
 import SFTPServer from './tools/SFTPServer'
+// Logo served as a static asset from public/ — no import needed, no TypeScript SVG module required.
+const SAP_LOGO_URL = '/sap-logo.svg'
 
 type Phase = 'design' | 'develop' | 'test' | 'monitoring'
 
+// ── ToolDialog ────────────────────────────────────────────────────────────────
+// Shared wrapper for all Toolbox tool overlays. Extracted to eliminate 12
+// near-identical Dialog blocks and fix the shared-maximized-state bug
+// (previously a single boolean toggled all tools at once).
+
+interface ToolDialogProps {
+  id:               ToolID
+  activeTool:       ToolID | null
+  maximizedTool:    ToolID | null
+  title:            string
+  defaultWidth?:    string
+  defaultHeight?:   string
+  fullScreen?:      boolean
+  onClose:          () => void
+  onToggleMaximize: (id: ToolID) => void
+  children:         React.ReactNode
+}
+
+function ToolDialog({
+  id, activeTool, maximizedTool, title,
+  defaultWidth, defaultHeight, fullScreen,
+  onClose, onToggleMaximize, children,
+}: ToolDialogProps) {
+  const isMaximized = !fullScreen && maximizedTool === id
+  return (
+    <Dialog
+      open={activeTool === id}
+      headerText={title}
+      stretch={isMaximized || !!fullScreen}
+      style={(!isMaximized && !fullScreen) ? { width: defaultWidth, height: defaultHeight } : undefined}
+      onClose={onClose}
+    >
+      {children}
+      <Bar slot="footer">
+        {!fullScreen && (
+          <Button
+            slot="startContent"
+            design="Transparent"
+            icon={isMaximized ? 'exit-full-screen' : 'full-screen'}
+            onClick={() => onToggleMaximize(id)}
+          >
+            {isMaximized ? 'Restore' : 'Maximise'}
+          </Button>
+        )}
+        <Button slot="endContent" design="Transparent" onClick={onClose}>Close</Button>
+      </Bar>
+    </Dialog>
+  )
+}
+
+// ── ClipboardBadge ────────────────────────────────────────────────────────────
 
 function ClipboardBadge({ onClick }: { onClick: () => void }) {
   const { clipboard } = useClipboard()
@@ -63,15 +112,21 @@ function ClipboardBadge({ onClick }: { onClick: () => void }) {
   )
 }
 
-export default function App() {
-  const [phase, setPhase] = useState<Phase>('design')
-  const [toolboxOpen, setToolboxOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [activeTool,  setActiveTool]  = useState<ToolID | null>(null)
-  const [maximized,   setMaximized]   = useState(false)
+// ── App ───────────────────────────────────────────────────────────────────────
 
-  function openTool(id: ToolID) { setActiveTool(id); setMaximized(false) }
-  function closeTool()           { setActiveTool(null); setMaximized(false) }
+export default function App() {
+  const [phase,         setPhase]         = useState<Phase>('design')
+  const [toolboxOpen,   setToolboxOpen]   = useState(false)
+  const [settingsOpen,  setSettingsOpen]  = useState(false)
+  const [activeTool,    setActiveTool]    = useState<ToolID | null>(null)
+  const [maximizedTool, setMaximizedTool] = useState<ToolID | null>(null)
+
+  function openTool(id: ToolID)          { setActiveTool(id); setMaximizedTool(null) }
+  function closeTool()                   { setActiveTool(null); setMaximizedTool(null) }
+  function toggleMaximize(id: ToolID)    { setMaximizedTool(t => t === id ? null : id) }
+
+  // Spread onto every ToolDialog to avoid repeating the four shared props.
+  const tdProps = { activeTool, maximizedTool, onClose: closeTool, onToggleMaximize: toggleMaximize }
 
   return (
     <WorkspaceProvider>
@@ -80,13 +135,7 @@ export default function App() {
       <ShellBar
         primaryTitle="SAP CPI Toolkit"
         secondaryTitle="v2"
-        logo={
-          <img
-            alt="SAP"
-            src="https://www.sap.com/dam/application/shared/logos/sap-logo-svg.svg"
-            style={{ height: '1.5rem' }}
-          />
-        }
+        logo={<img alt="SAP" src={SAP_LOGO_URL} style={{ height: '1.5rem' }} />}
         onProfileClick={() => setSettingsOpen(true)}
         accessibilityAttributes={{ profile: { name: 'Settings' } }}
       >
@@ -102,38 +151,32 @@ export default function App() {
         background: 'var(--sapGroup_TitleBackground)',
         padding: '0 1rem',
         flexShrink: 0,
-        gap: '0',
       }}>
         {(['design', 'develop', 'test', 'monitoring'] as Phase[]).map(p => (
-          <button
-            key={p}
-            onClick={() => setPhase(p)}
-            style={{
-              padding: '0.6rem 1.25rem',
-              border: 'none',
-              borderBottom: phase === p ? '2px solid var(--sapHighlightColor)' : '2px solid transparent',
-              marginBottom: '-2px',
-              background: 'transparent',
-              cursor: 'pointer',
-              fontFamily: 'var(--sapFontFamily)',
-              fontSize: 'var(--sapFontSize)',
-              color: phase === p ? 'var(--sapHighlightColor)' : 'var(--sapTextColor)',
-              fontWeight: phase === p ? 600 : 400,
-            }}
-          >
-            {p.charAt(0).toUpperCase() + p.slice(1)}
-          </button>
+          <div key={p} style={{
+            borderBottom: phase === p ? '2px solid var(--sapHighlightColor)' : '2px solid transparent',
+            marginBottom: '-2px',
+            display: 'flex',
+          }}>
+            <Button
+              design="Transparent"
+              onClick={() => setPhase(p)}
+              style={{
+                borderRadius: 0,
+                fontWeight: phase === p ? 600 : 400,
+                color: phase === p ? 'var(--sapHighlightColor)' : 'var(--sapTextColor)',
+              } as React.CSSProperties}
+            >
+              {p.charAt(0).toUpperCase() + p.slice(1)}
+            </Button>
+          </div>
         ))}
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0' }}>
           <ContextBar />
           <div style={{ width: 1, height: '1.25rem', background: 'var(--sapList_BorderColor)' }} />
           <ClipboardBadge onClick={() => setToolboxOpen(true)} />
-          <Button
-            icon="wrench"
-            design="Transparent"
-            onClick={() => setToolboxOpen(true)}
-          >
+          <Button icon="wrench" design="Transparent" onClick={() => setToolboxOpen(true)}>
             Toolbox
           </Button>
         </div>
@@ -150,182 +193,21 @@ export default function App() {
       <ToolboxPanel
         open={toolboxOpen}
         onClose={() => setToolboxOpen(false)}
-        onOpenTool={(id) => openTool(id)}
+        onOpenTool={openTool}
       />
 
       {/* Tool overlays */}
-      <Dialog
-        open={activeTool === 'formatter'}
-        headerText="Formatter"
-        stretch={maximized}
-        style={maximized ? undefined : { width: '92vw', height: '92vh' }}
-        onClose={closeTool}
-      >
-        <Formatter />
-        <Bar slot="footer">
-          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
-            {maximized ? 'Restore' : 'Maximise'}
-          </Btn>
-          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
-        </Bar>
-      </Dialog>
-
-      <Dialog
-        open={activeTool === 'groovy'}
-        headerText="Groovy IDE"
-        stretch={maximized}
-        style={maximized ? undefined : { width: '95vw', height: '95vh' }}
-        onClose={closeTool}
-      >
-        <GroovyIDE />
-        <Bar slot="footer">
-          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
-            {maximized ? 'Restore' : 'Maximise'}
-          </Btn>
-          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
-        </Bar>
-      </Dialog>
-
-      <Dialog
-        open={activeTool === 'security'}
-        headerText="Security"
-        stretch={maximized}
-        style={maximized ? undefined : { width: '70vw', height: '85vh' }}
-        onClose={closeTool}
-      >
-        <Security />
-        <Bar slot="footer">
-          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
-            {maximized ? 'Restore' : 'Maximise'}
-          </Btn>
-          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
-        </Bar>
-      </Dialog>
-
-      <Dialog
-        open={activeTool === 'sftp'}
-        headerText="SFTP Server"
-        stretch
-        style={{ width: '100vw', height: '100vh' }}
-        onClose={closeTool}
-      >
-        <SFTPServer />
-        <Bar slot="footer">
-          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
-        </Bar>
-      </Dialog>
-
-      <Dialog
-        open={activeTool === 'assets'}
-        headerText="Asset Library"
-        stretch={maximized}
-        style={maximized ? undefined : { width: '90vw', height: '90vh' }}
-        onClose={closeTool}
-      >
-        <AssetLibrary />
-        <Bar slot="footer">
-          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
-            {maximized ? 'Restore' : 'Maximise'}
-          </Btn>
-          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
-        </Bar>
-      </Dialog>
-
-      <Dialog
-        open={activeTool === 'http-client'}
-        headerText="HTTP Client"
-        stretch={maximized}
-        style={maximized ? undefined : { width: '80vw', height: '90vh' }}
-        onClose={closeTool}
-      >
-        <HttpClient />
-        <Bar slot="footer">
-          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
-            {maximized ? 'Restore' : 'Maximise'}
-          </Btn>
-          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
-        </Bar>
-      </Dialog>
-
-      <Dialog
-        open={activeTool === 'cloud-connector'}
-        headerText="Cloud Connector"
-        stretch={maximized}
-        style={maximized ? undefined : { width: '80vw', height: '90vh' }}
-        onClose={closeTool}
-      >
-        <CloudConnector />
-        <Bar slot="footer">
-          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
-            {maximized ? 'Restore' : 'Maximise'}
-          </Btn>
-          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
-        </Bar>
-      </Dialog>
-
-      <Dialog
-        open={activeTool === 'edi'}
-        headerText="EDI Tools"
-        stretch={maximized}
-        style={maximized ? undefined : { width: '90vw', height: '90vh' }}
-        onClose={closeTool}
-      >
-        <EDITools />
-        <Bar slot="footer">
-          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
-            {maximized ? 'Restore' : 'Maximise'}
-          </Btn>
-          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
-        </Bar>
-      </Dialog>
-
-      <Dialog
-        open={activeTool === 'adapter-templates'}
-        headerText="Adapter Templates — Global Library"
-        stretch={maximized}
-        style={maximized ? undefined : { width: '90vw', height: '90vh' }}
-        onClose={closeTool}
-      >
-        <GlobalAdapterTemplates />
-        <Bar slot="footer">
-          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
-            {maximized ? 'Restore' : 'Maximise'}
-          </Btn>
-          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
-        </Bar>
-      </Dialog>
-
-      <Dialog
-        open={activeTool === 'registry-settings'}
-        headerText="Registry Settings"
-        stretch={maximized}
-        style={maximized ? undefined : { width: '600px', height: '80vh' }}
-        onClose={closeTool}
-      >
-        <RegistrySettings />
-        <Bar slot="footer">
-          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
-            {maximized ? 'Restore' : 'Maximise'}
-          </Btn>
-          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
-        </Bar>
-      </Dialog>
-
-      <Dialog
-        open={activeTool === 'mock-server'}
-        headerText="HTTP Mock Server"
-        stretch={maximized}
-        style={maximized ? undefined : { width: '90vw', height: '90vh' }}
-        onClose={closeTool}
-      >
-        <MockServer />
-        <Bar slot="footer">
-          <Btn slot="startContent" design="Transparent" icon={maximized ? 'exit-full-screen' : 'full-screen'} onClick={() => setMaximized(m => !m)}>
-            {maximized ? 'Restore' : 'Maximise'}
-          </Btn>
-          <Btn slot="endContent" design="Transparent" onClick={closeTool}>Close</Btn>
-        </Bar>
-      </Dialog>
+      <ToolDialog {...tdProps} id="formatter"          title="Formatter"                        defaultWidth="92vw"  defaultHeight="92vh"><Formatter /></ToolDialog>
+      <ToolDialog {...tdProps} id="groovy"             title="Groovy IDE"                       defaultWidth="95vw"  defaultHeight="95vh"><GroovyIDE /></ToolDialog>
+      <ToolDialog {...tdProps} id="security"           title="Security"                         defaultWidth="70vw"  defaultHeight="85vh"><Security /></ToolDialog>
+      <ToolDialog {...tdProps} id="sftp"               title="SFTP Server"                      fullScreen><SFTPServer /></ToolDialog>
+      <ToolDialog {...tdProps} id="assets"             title="Asset Library"                    defaultWidth="90vw"  defaultHeight="90vh"><AssetLibrary /></ToolDialog>
+      <ToolDialog {...tdProps} id="http-client"        title="HTTP Client"                      defaultWidth="80vw"  defaultHeight="90vh"><HttpClient /></ToolDialog>
+      <ToolDialog {...tdProps} id="cloud-connector"    title="Cloud Connector"                  defaultWidth="80vw"  defaultHeight="90vh"><CloudConnector /></ToolDialog>
+      <ToolDialog {...tdProps} id="edi"                title="EDI Tools"                        defaultWidth="90vw"  defaultHeight="90vh"><EDITools /></ToolDialog>
+      <ToolDialog {...tdProps} id="adapter-templates"  title="Adapter Templates — Global Library" defaultWidth="90vw" defaultHeight="90vh"><GlobalAdapterTemplates /></ToolDialog>
+      <ToolDialog {...tdProps} id="registry-settings"  title="Registry Settings"                defaultWidth="600px" defaultHeight="80vh"><RegistrySettings /></ToolDialog>
+      <ToolDialog {...tdProps} id="mock-server"        title="HTTP Mock Server"                 defaultWidth="90vw"  defaultHeight="90vh"><MockServer /></ToolDialog>
 
     </FlexBox>
     </WorkspaceProvider>

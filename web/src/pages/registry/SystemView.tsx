@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Button, Input } from '@ui5/webcomponents-react'
 import { useRegistryApi } from './useRegistryApi'
 import { getSystemColor } from './types'
 
@@ -51,11 +52,12 @@ export default function SystemView() {
 
         {/* Toolbar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--sapList_BorderColor)', background: 'var(--sapGroup_TitleBackground)', flexShrink: 0 }}>
-          <input
+          <Input
             placeholder="Search systems…"
             value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ padding: '4px 10px', border: '1px solid var(--sapList_BorderColor)', borderRadius: 14, fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', background: 'var(--sapBackgroundColor)', color: 'var(--sapTextColor)', width: 220 }}
+            showClearIcon
+            style={{ width: '220px' }}
+            onInput={e => setSearch((e.target as unknown as HTMLInputElement).value)}
           />
           <span style={{ marginLeft: 'auto', ...col }}>{filtered.length} of {api.systems.length} systems</span>
         </div>
@@ -128,7 +130,7 @@ export default function SystemView() {
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: color }} />
                 <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--sapTextColor)' }}>{selected.name}</span>
               </div>
-              <button onClick={() => setSelectedId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: 'var(--sapTextColor)', lineHeight: 1 }}>✕</button>
+              <Button design="Transparent" icon="decline" onClick={() => setSelectedId(null)} />
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>

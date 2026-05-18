@@ -40,8 +40,12 @@ type systemBody struct {
 }
 
 func (h *Handler) listSystems(w http.ResponseWriter, r *http.Request) {
+	where := `WHERE archived_at IS NULL`
+	if r.URL.Query().Get("include_archived") == "true" {
+		where = ``
+	}
 	rows, err := h.pool.Query(r.Context(),
-		`SELECT `+systemCols+` FROM systems ORDER BY name`)
+		`SELECT `+systemCols+` FROM systems `+where+` ORDER BY name`)
 	if err != nil {
 		h.log.Error("list systems", "error", err)
 		apiError(w, 500, "internal error")
@@ -120,11 +124,12 @@ func (h *Handler) updateSystem(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, 200, s)
 }
 
-func (h *Handler) deleteSystem(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) archiveSystem(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	res, err := h.pool.Exec(r.Context(), `DELETE FROM systems WHERE id=$1`, id)
+	res, err := h.pool.Exec(r.Context(),
+		`UPDATE systems SET archived_at=now(), updated_at=now() WHERE id=$1 AND archived_at IS NULL`, id)
 	if err != nil {
-		h.log.Error("delete system", "error", err)
+		h.log.Error("archive system", "error", err)
 		apiError(w, 500, "internal error")
 		return
 	}
@@ -133,4 +138,20 @@ func (h *Handler) deleteSystem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(204)
+}
+
+func (h *Handler) unarchiveSystem(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	s, err := scanSystem(h.pool.QueryRow(r.Context(),
+		`UPDATE systems SET archived_at=NULL, updated_at=now() WHERE id=$1 RETURNING `+systemCols, id))
+	if err != nil {
+		if isNotFound(err) {
+			apiError(w, 404, "not found")
+			return
+		}
+		h.log.Error("unarchive system", "error", err)
+		apiError(w, 500, "internal error")
+		return
+	}
+	jsonResp(w, 200, s)
 }

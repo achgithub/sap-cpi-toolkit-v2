@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Button, Input, Select, Option, TextArea, Label,
+  MessageStrip, Dialog, Bar,
+} from '@ui5/webcomponents-react'
 import { useRegistryApi } from './useRegistryApi'
 import type { Interface, Receiver, System, ViaHop, PlatformConfig } from './types'
 import { STATUS_COLORS, TYPE_LABELS, STATUSES, INTERFACE_TYPES, TRANSPORTS, AUTH_TYPES } from './types'
@@ -10,38 +14,42 @@ interface Props {
   onBack?: () => void
 }
 
-// ── Shared styles ─────────────────────────────────────────────────────────────
-
-const fieldStyle: React.CSSProperties = {
-  padding: '5px 8px', border: '1px solid var(--sapList_BorderColor)', borderRadius: '4px',
-  fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem',
-  background: 'var(--sapBackgroundColor)', color: 'var(--sapTextColor)',
-  width: '100%', boxSizing: 'border-box',
+// Helper: read value from a UI5 Select onChange event.
+// UI5's SelectChangeEventDetail.selectedOption is a web component element; .value gives its value.
+function selVal(e: unknown): string {
+  return ((e as any)?.detail?.selectedOption?.value as string | undefined) ?? ''
 }
 
-function btnStyle(variant: 'primary' | 'default' | 'negative'): React.CSSProperties {
-  const bg = variant === 'primary' ? 'var(--sapHighlightColor)' : variant === 'negative' ? 'var(--sapNegativeColor)' : 'transparent'
-  return {
-    padding: '5px 14px', cursor: 'pointer', borderRadius: '4px', fontSize: '0.8rem',
-    fontFamily: 'var(--sapFontFamily)', border: `1px solid ${variant === 'default' ? 'var(--sapList_BorderColor)' : bg}`,
-    background: bg, color: variant === 'default' ? 'var(--sapTextColor)' : '#fff',
-  }
-}
+// ── Field wrapper ─────────────────────────────────────────────────────────────
+// Uses UI5 Label (Fiori-spec font, colon, required marker) above the control.
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-      <label style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)', fontWeight: 600 }}>{label}</label>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <Label required={required}>{label}</Label>
       {children}
     </div>
   )
 }
 
+// ── ViaEditor ────────────────────────────────────────────────────────────────
+// Uses native <select> for the "pick-and-reset" pickers deliberately:
+// the controlled-reset pattern (select item → immediately return to placeholder)
+// maps to native <select value=""> more reliably than UI5 Select.
+// All other interactive elements in this file use UI5 components.
+
+const pickerSelect: React.CSSProperties = {
+  padding: '5px 8px', border: '1px solid var(--sapList_BorderColor)', borderRadius: '4px',
+  fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem',
+  background: 'var(--sapField_Background)', color: 'var(--sapTextColor)',
+  boxSizing: 'border-box',
+}
+
 function ViaEditor({ value, onChange, platforms = [], systems = [] }: {
-  value: ViaHop[]
-  onChange: (v: ViaHop[]) => void
+  value:     ViaHop[]
+  onChange:  (v: ViaHop[]) => void
   platforms?: PlatformConfig[]
-  systems?: System[]
+  systems?:  System[]
 }) {
   function addSystem(sysId: string) {
     const sys = systems.find(s => s.id === sysId)
@@ -57,19 +65,17 @@ function ViaEditor({ value, onChange, platforms = [], systems = [] }: {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      {/* Hop tags */}
       {value.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
           {value.map((hop, i) => {
-            const color = platforms.find(p => p.name === hop.label)?.color
+            const color    = platforms.find(p => p.name === hop.label)?.color
             const isLinked = !!hop.system_id
             return (
               <span key={i} style={{
                 display: 'inline-flex', alignItems: 'center', gap: '4px',
                 padding: '2px 8px', borderRadius: '12px',
                 background: isLinked ? '#1B5E20' : (color ?? 'var(--sapHighlightColor)'),
-                color: '#fff',
-                fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem',
+                color: '#fff', fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem',
               }}>
                 {i > 0 && <span style={{ opacity: 0.7, marginRight: 2 }}>→</span>}
                 {hop.label}
@@ -84,9 +90,8 @@ function ViaEditor({ value, onChange, platforms = [], systems = [] }: {
           })}
         </div>
       )}
-      {/* System picker (primary) + platform label (fallback) */}
       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-        <select style={{ ...fieldStyle, flex: 2, minWidth: 140 }} value="" onChange={e => { if (e.target.value) addSystem(e.target.value) }}>
+        <select style={{ ...pickerSelect, flex: 2, minWidth: 140 }} value="" onChange={e => { if (e.target.value) addSystem(e.target.value) }}>
           <option value="">+ System (linked)</option>
           {[...systems].sort((a, b) => a.name.localeCompare(b.name)).map(s => (
             <option key={s.id} value={s.id}>
@@ -95,7 +100,7 @@ function ViaEditor({ value, onChange, platforms = [], systems = [] }: {
           ))}
         </select>
         {platforms.length > 0 && (
-          <select style={{ ...fieldStyle, flex: 1, minWidth: 100 }} value="" onChange={e => { if (e.target.value) addPlatform(e.target.value) }}>
+          <select style={{ ...pickerSelect, flex: 1, minWidth: 100 }} value="" onChange={e => { if (e.target.value) addPlatform(e.target.value) }}>
             <option value="">+ Platform label</option>
             {platforms.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
           </select>
@@ -105,7 +110,6 @@ function ViaEditor({ value, onChange, platforms = [], systems = [] }: {
   )
 }
 
-// Render a via path as "A → B → C"
 function ViaPath({ via }: { via: ViaHop[] }) {
   if (!via.length) return null
   return <>{via.map(h => h.label).join(' → ')}</>
@@ -131,9 +135,9 @@ function fromInterface(i: Interface): IfaceFormData {
   return {
     name: i.name, ref: i.ref.trim(), build_ref: i.build_ref, status: i.status,
     interface_type: i.interface_type,
-    sender_system_id:  i.sender_system_id ?? '',
-    logical_group_id:  i.logical_group_id ?? '',
-    sequence_in_group: i.sequence_in_group != null ? String(i.sequence_in_group) : '',
+    sender_system_id:   i.sender_system_id  ?? '',
+    logical_group_id:   i.logical_group_id  ?? '',
+    sequence_in_group:  i.sequence_in_group != null ? String(i.sequence_in_group) : '',
     sender_step_label:  i.sender_step_label,
     receiver_step_label: i.receiver_step_label,
     functional_domain:  i.functional_domain,
@@ -147,22 +151,21 @@ function toBody(f: IfaceFormData): Partial<Interface> {
     name: f.name, ref: f.ref || undefined, build_ref: f.build_ref,
     status:         f.status as Interface['status'],
     interface_type: f.interface_type as Interface['interface_type'],
-    sender_system_id:   f.sender_system_id  || null,
-    logical_group_id:   f.logical_group_id  || null,
-    sequence_in_group:  f.sequence_in_group ? parseInt(f.sequence_in_group) : null,
-    sender_step_label:  f.sender_step_label,
+    sender_system_id:    f.sender_system_id   || null,
+    logical_group_id:    f.logical_group_id   || null,
+    sequence_in_group:   f.sequence_in_group ? parseInt(f.sequence_in_group) : null,
+    sender_step_label:   f.sender_step_label,
     receiver_step_label: f.receiver_step_label,
-    functional_domain:  f.functional_domain,
-    via:                f.via,
-    description:        f.description,
+    functional_domain:   f.functional_domain,
+    via:                 f.via,
+    description:         f.description,
   }
 }
 
-function GroupField({ form, setForm, api, F }: {
+function GroupField({ form, setForm, api }: {
   form:    IfaceFormData
   setForm: React.Dispatch<React.SetStateAction<IfaceFormData>>
   api:     ReturnType<typeof useRegistryApi>
-  F:       React.CSSProperties
 }) {
   const [adding,    setAdding]    = useState(false)
   const [groupName, setGroupName] = useState('')
@@ -182,24 +185,39 @@ function GroupField({ form, setForm, api, F }: {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-      <label style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)', fontWeight: 600 }}>Logical Group</label>
+    <Field label="Logical Group">
       <div style={{ display: 'flex', gap: '4px' }}>
-        <select style={{ ...F, flex: 1 }} value={form.logical_group_id} onChange={e => setForm(f => ({ ...f, logical_group_id: e.target.value }))}>
-          <option value="">— standalone —</option>
-          {api.logicalGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-        </select>
-        <button type="button" style={{ ...btnStyle('default'), padding: '5px 10px', flexShrink: 0 }} onClick={() => setAdding(a => !a)} title="New group">＋</button>
+        <Select
+          value={form.logical_group_id}
+          style={{ flex: 1 } as React.CSSProperties}
+          onChange={e => setForm(f => ({ ...f, logical_group_id: selVal(e) }))}
+        >
+          <Option value="">— standalone —</Option>
+          {api.logicalGroups.map(g => (
+            <Option key={g.id} value={g.id} selected={form.logical_group_id === g.id}>{g.name}</Option>
+          ))}
+        </Select>
+        <Button icon="add" onClick={() => setAdding(a => !a)} title="New group" />
       </div>
       {adding && (
         <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
-          <input style={{ ...F, flex: 1 }} autoFocus value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="Group name" onKeyDown={e => { if (e.key === 'Enter') createGroup(); if (e.key === 'Escape') setAdding(false) }} />
-          <button style={{ ...btnStyle('primary'), padding: '5px 10px', flexShrink: 0 }} onClick={createGroup} disabled={saving}>
+          <Input
+            style={{ flex: 1 } as React.CSSProperties}
+            autoFocus
+            value={groupName}
+            placeholder="Group name"
+            onInput={e => setGroupName((e.target as unknown as HTMLInputElement).value)}
+            onKeyDown={e => {
+              if ((e as any).key === 'Enter') createGroup()
+              if ((e as any).key === 'Escape') setAdding(false)
+            }}
+          />
+          <Button design="Emphasized" onClick={createGroup} disabled={saving}>
             {saving ? '…' : 'Add'}
-          </button>
+          </Button>
         </div>
       )}
-    </div>
+    </Field>
   )
 }
 
@@ -212,10 +230,10 @@ function InterfaceForm({
   onCancel:  () => void
   onDelete?: () => Promise<void>
 }) {
-  const [form,   setForm]   = useState(initial)
-  const [saving, setSaving] = useState(false)
-  const [error,  setError]  = useState('')
-  const F = fieldStyle
+  const [form,          setForm]          = useState(initial)
+  const [saving,        setSaving]        = useState(false)
+  const [error,         setError]         = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   async function save() {
     if (!form.name.trim()) { setError('Name is required'); return }
@@ -227,92 +245,162 @@ function InterfaceForm({
 
   async function del() {
     if (!onDelete) return
-    if (!confirm('Delete this interface?')) return
     setSaving(true)
     try { await onDelete() }
     catch (e) { setError(e instanceof Error ? e.message : 'Error deleting') }
-    finally { setSaving(false) }
+    finally { setSaving(false); setConfirmDelete(false) }
   }
+
+  const refHasError = error.toLowerCase().includes('ref')
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
       {error && (
-        <div style={{
-          padding: '8px 12px', background: '#c0392b', color: '#fff',
-          borderRadius: '4px', fontFamily: 'var(--sapFontFamily)', fontSize: '0.82rem',
-          fontWeight: 600, borderLeft: '4px solid #922b21',
-        }}>
-          ⚠ {error}
-        </div>
+        <MessageStrip design="Negative" hideCloseButton>{error}</MessageStrip>
       )}
 
-      <Field label="Name *">
-        <input style={F} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Interface name" />
+      <Field label="Name" required>
+        <Input
+          value={form.name}
+          placeholder="Interface name"
+          style={{ width: '100%' } as React.CSSProperties}
+          onInput={e => setForm(f => ({ ...f, name: (e.target as unknown as HTMLInputElement).value }))}
+        />
       </Field>
 
       <Field label="Ref">
-        <input
-          style={{ ...F, borderColor: error.toLowerCase().includes('ref') ? '#c0392b' : undefined }}
+        <Input
           value={form.ref}
-          onChange={e => { setError(''); setForm(f => ({ ...f, ref: e.target.value.toUpperCase() })) }}
+          maxlength={10}
           placeholder="Auto-generated if blank (e.g. RICEF-001)"
-          maxLength={10}
+          valueState={refHasError ? 'Negative' : 'None'}
+          style={{ width: '100%' } as React.CSSProperties}
+          onInput={e => {
+            setError('')
+            setForm(f => ({ ...f, ref: (e.target as unknown as HTMLInputElement).value.toUpperCase() }))
+          }}
         />
       </Field>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
         <Field label="Status">
-          <select style={F} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-            {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-          </select>
+          <Select
+            style={{ width: '100%' } as React.CSSProperties}
+            onChange={e => setForm(f => ({ ...f, status: selVal(e) }))}
+          >
+            {STATUSES.map(s => (
+              <Option key={s} value={s} selected={form.status === s}>
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </Option>
+            ))}
+          </Select>
         </Field>
         <Field label="Type">
-          <select style={F} value={form.interface_type} onChange={e => setForm(f => ({ ...f, interface_type: e.target.value }))}>
-            {INTERFACE_TYPES.map(t => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
-          </select>
+          <Select
+            style={{ width: '100%' } as React.CSSProperties}
+            onChange={e => setForm(f => ({ ...f, interface_type: selVal(e) }))}
+          >
+            {INTERFACE_TYPES.map(t => (
+              <Option key={t} value={t} selected={form.interface_type === t}>{TYPE_LABELS[t]}</Option>
+            ))}
+          </Select>
         </Field>
       </div>
 
       <Field label="Build Ref">
-        <input style={F} value={form.build_ref} onChange={e => setForm(f => ({ ...f, build_ref: e.target.value }))} placeholder="RICEF-001 / JIRA-1234" />
+        <Input
+          value={form.build_ref}
+          placeholder="RICEF-001 / JIRA-1234"
+          style={{ width: '100%' } as React.CSSProperties}
+          onInput={e => setForm(f => ({ ...f, build_ref: (e.target as unknown as HTMLInputElement).value }))}
+        />
       </Field>
 
       <Field label="Sender System">
-        <select style={F} value={form.sender_system_id} onChange={e => setForm(f => ({ ...f, sender_system_id: e.target.value }))}>
-          <option value="">— none —</option>
-          {api.systems.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+        <Select
+          style={{ width: '100%' } as React.CSSProperties}
+          onChange={e => setForm(f => ({ ...f, sender_system_id: selVal(e) }))}
+        >
+          <Option value="" selected={!form.sender_system_id}>— none —</Option>
+          {api.systems.map(s => (
+            <Option key={s.id} value={s.id} selected={form.sender_system_id === s.id}>{s.name}</Option>
+          ))}
+        </Select>
       </Field>
 
-      <GroupField form={form} setForm={setForm} api={api} F={F} />
+      <GroupField form={form} setForm={setForm} api={api} />
 
       <Field label="Functional Domain">
-        <input style={F} value={form.functional_domain} onChange={e => setForm(f => ({ ...f, functional_domain: e.target.value }))} placeholder="Order to Cash / Finance / Logistics" />
+        <Input
+          value={form.functional_domain}
+          placeholder="Order to Cash / Finance / Logistics"
+          style={{ width: '100%' } as React.CSSProperties}
+          onInput={e => setForm(f => ({ ...f, functional_domain: (e.target as unknown as HTMLInputElement).value }))}
+        />
       </Field>
 
       <Field label="Via (shared hops for all receivers)">
-        <ViaEditor value={form.via} onChange={via => setForm(f => ({ ...f, via }))} platforms={api.config.platforms} systems={api.systems} />
+        <ViaEditor
+          value={form.via}
+          onChange={via => setForm(f => ({ ...f, via }))}
+          platforms={api.config.platforms}
+          systems={api.systems}
+        />
         <div style={{ fontSize: '0.7rem', color: 'var(--sapContent_LabelColor)', marginTop: '2px' }}>
           e.g. SAP CPI → SFTP Server. Add per-receiver hops on the Receivers tab.
         </div>
       </Field>
 
       <Field label="Description">
-        <textarea style={{ ...F, height: '72px', resize: 'vertical' }} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+        <TextArea
+          value={form.description}
+          rows={3}
+          growing
+          style={{ width: '100%' } as React.CSSProperties}
+          onInput={e => setForm(f => ({ ...f, description: (e.target as unknown as HTMLTextAreaElement).value }))}
+        />
       </Field>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px', marginTop: '4px' }}>
-        {onDelete ? <button style={btnStyle('negative')} onClick={del} disabled={saving}>Delete</button> : <span />}
+        {onDelete
+          ? <Button design="Negative" disabled={saving} onClick={() => setConfirmDelete(true)}>Delete</Button>
+          : <span />
+        }
         <div style={{ display: 'flex', gap: '6px' }}>
-          <button style={btnStyle('default')} onClick={onCancel}>Cancel</button>
-          <button style={btnStyle('primary')} onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+          <Button onClick={onCancel}>Cancel</Button>
+          <Button design="Emphasized" disabled={saving} onClick={save}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
         </div>
       </div>
+
+      {/* Delete confirmation — UI5 Dialog portals to document.body, so parent overflow:hidden won't clip it */}
+      <Dialog
+        open={confirmDelete}
+        headerText="Delete Interface"
+        onClose={() => setConfirmDelete(false)}
+        style={{ width: '400px' }}
+      >
+        <div style={{ padding: '1rem' }}>
+          <MessageStrip design="Negative" hideCloseButton>
+            This will permanently delete the interface and all its receivers. This cannot be undone.
+          </MessageStrip>
+        </div>
+        <Bar slot="footer">
+          <div slot="endContent" style={{ display: 'flex', gap: '0.5rem' }}>
+            <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
+            <Button design="Negative" disabled={saving} onClick={del}>
+              {saving ? 'Deleting…' : 'Delete'}
+            </Button>
+          </div>
+        </Bar>
+      </Dialog>
     </div>
   )
 }
 
-// ── Receiver row (in detail panel) ────────────────────────────────────────────
+// ── Receiver row ──────────────────────────────────────────────────────────────
 
 function ReceiverRow({
   rec, systems, platforms, onUpdate, onDelete,
@@ -324,34 +412,69 @@ function ReceiverRow({
   onDelete: () => Promise<void>
 }) {
   const [editing, setEditing] = useState(false)
-  const [form,    setForm]    = useState({
-    system_id: rec.system_id ?? '', transport: rec.transport,
-    auth_type: rec.auth_type, credential_alias: rec.credential_alias,
-    via: rec.via ?? [] as ViaHop[],
+  const [form, setForm] = useState({
+    system_id:        rec.system_id ?? '',
+    transport:        rec.transport,
+    auth_type:        rec.auth_type,
+    credential_alias: rec.credential_alias,
+    via:              rec.via ?? [] as ViaHop[],
   })
-  const F = fieldStyle
 
   if (editing) {
     return (
-      <div style={{ padding: '8px', border: '1px solid var(--sapList_BorderColor)', borderRadius: '4px', marginBottom: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        <select style={F} value={form.system_id} onChange={e => setForm(f => ({ ...f, system_id: e.target.value }))}>
-          <option value="">— no system —</option>
-          {systems.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+      <div style={{
+        padding: '8px', border: '1px solid var(--sapList_BorderColor)',
+        borderRadius: '4px', marginBottom: '6px',
+        display: 'flex', flexDirection: 'column', gap: '6px',
+      }}>
+        <Select
+          style={{ width: '100%' } as React.CSSProperties}
+          onChange={e => setForm(f => ({ ...f, system_id: selVal(e) }))}
+        >
+          <Option value="" selected={!form.system_id}>— no system —</Option>
+          {systems.map(s => (
+            <Option key={s.id} value={s.id} selected={form.system_id === s.id}>{s.name}</Option>
+          ))}
+        </Select>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-          <select style={F} value={form.transport} onChange={e => setForm(f => ({ ...f, transport: e.target.value }))}>
-            {TRANSPORTS.map(t => <option key={t} value={t}>{t || '—'}</option>)}
-          </select>
-          <select style={F} value={form.auth_type} onChange={e => setForm(f => ({ ...f, auth_type: e.target.value }))}>
-            {AUTH_TYPES.map(a => <option key={a} value={a}>{a || '—'}</option>)}
-          </select>
+          <Select
+            style={{ width: '100%' } as React.CSSProperties}
+            onChange={e => setForm(f => ({ ...f, transport: selVal(e) }))}
+          >
+            {TRANSPORTS.map(t => (
+              <Option key={t} value={t} selected={form.transport === t}>{t || '—'}</Option>
+            ))}
+          </Select>
+          <Select
+            style={{ width: '100%' } as React.CSSProperties}
+            onChange={e => setForm(f => ({ ...f, auth_type: selVal(e) }))}
+          >
+            {AUTH_TYPES.map(a => (
+              <Option key={a} value={a} selected={form.auth_type === a}>{a || '—'}</Option>
+            ))}
+          </Select>
         </div>
-        <input style={F} value={form.credential_alias} onChange={e => setForm(f => ({ ...f, credential_alias: e.target.value }))} placeholder="Credential alias" />
-        <div style={{ fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)', marginTop: '2px' }}>Via (pre-receiver hops, if different from interface)</div>
-        <ViaEditor value={form.via} onChange={via => setForm(f => ({ ...f, via }))} platforms={platforms} systems={systems} />
+        <Input
+          value={form.credential_alias}
+          placeholder="Credential alias"
+          style={{ width: '100%' } as React.CSSProperties}
+          onInput={e => setForm(f => ({ ...f, credential_alias: (e.target as unknown as HTMLInputElement).value }))}
+        />
+        <div style={{ fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)' }}>
+          Via (pre-receiver hops, if different from interface)
+        </div>
+        <ViaEditor
+          value={form.via}
+          onChange={via => setForm(f => ({ ...f, via }))}
+          platforms={platforms}
+          systems={systems}
+        />
         <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-          <button style={btnStyle('default')} onClick={() => setEditing(false)}>Cancel</button>
-          <button style={btnStyle('primary')} onClick={async () => { await onUpdate({ ...form, system_id: form.system_id || null }); setEditing(false) }}>Save</button>
+          <Button onClick={() => setEditing(false)}>Cancel</Button>
+          <Button design="Emphasized" onClick={async () => {
+            await onUpdate({ ...form, system_id: form.system_id || null })
+            setEditing(false)
+          }}>Save</Button>
         </div>
       </div>
     )
@@ -359,12 +482,17 @@ function ReceiverRow({
 
   const sysName = systems.find(s => s.id === rec.system_id)?.name ?? '— no system —'
   return (
-    <div style={{ padding: '6px 0', borderBottom: '1px solid var(--sapList_BorderColor)', fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapTextColor)' }}>
+    <div style={{
+      padding: '6px 0', borderBottom: '1px solid var(--sapList_BorderColor)',
+      fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapTextColor)',
+    }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <span style={{ flex: 1 }}>{sysName}</span>
-        {rec.transport && <span style={{ color: 'var(--sapContent_LabelColor)', fontSize: '0.72rem' }}>{rec.transport}</span>}
-        <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--sapHighlightColor)' }} onClick={() => setEditing(true)}>Edit</button>
-        <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--sapNegativeColor)' }} onClick={onDelete}>✕</button>
+        {rec.transport && (
+          <span style={{ color: 'var(--sapContent_LabelColor)', fontSize: '0.72rem' }}>{rec.transport}</span>
+        )}
+        <Button design="Transparent" onClick={() => setEditing(true)}>Edit</Button>
+        <Button design="Transparent" icon="decline" onClick={onDelete} />
       </div>
       {rec.via?.length > 0 && (
         <div style={{ fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)', marginTop: '2px' }}>
@@ -377,9 +505,7 @@ function ReceiverRow({
 
 // ── Detail panel ──────────────────────────────────────────────────────────────
 
-function DetailPanel({
-  iface, api, onClose,
-}: {
+function DetailPanel({ iface, api, onClose }: {
   iface:   Interface
   api:     ReturnType<typeof useRegistryApi>
   onClose: () => void
@@ -406,27 +532,31 @@ function DetailPanel({
     )
   }
 
-  const F = fieldStyle
   const systems = api.systems
 
   return (
     <Panel
       title={iface.name}
       onClose={onClose}
-      action={<button style={btnStyle('default')} onClick={() => setEditing(true)}>Edit</button>}
+      action={<Button onClick={() => setEditing(true)}>Edit</Button>}
     >
-      {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--sapList_BorderColor)', marginBottom: '12px', gap: '0' }}>
+      {/* Tab strip */}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--sapList_BorderColor)', marginBottom: '12px' }}>
         {(['info', 'receivers'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            padding: '6px 14px', border: 'none', cursor: 'pointer', background: 'transparent',
-            fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem',
-            color: tab === t ? 'var(--sapHighlightColor)' : 'var(--sapTextColor)',
-            borderBottom: tab === t ? '2px solid var(--sapHighlightColor)' : '2px solid transparent',
-            marginBottom: '-1px',
-          }}>
+          <Button
+            key={t}
+            design="Transparent"
+            onClick={() => setTab(t)}
+            style={{
+              borderRadius: 0,
+              borderBottom: tab === t ? '2px solid var(--sapHighlightColor)' : '2px solid transparent',
+              marginBottom: '-1px',
+              fontWeight: tab === t ? 600 : 400,
+              color: tab === t ? 'var(--sapHighlightColor)' : undefined,
+            } as React.CSSProperties}
+          >
             {t === 'info' ? 'Info' : `Receivers (${iface.receivers.length})`}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -445,10 +575,8 @@ function DetailPanel({
           {iface.sequence_in_group != null && <InfoRow label="Sequence">{iface.sequence_in_group}</InfoRow>}
           {iface.sender_step_label   && <InfoRow label="Sender step">{iface.sender_step_label}</InfoRow>}
           {iface.receiver_step_label && <InfoRow label="Recv. step">{iface.receiver_step_label}</InfoRow>}
-          {iface.functional_domain && <InfoRow label="Domain">{iface.functional_domain}</InfoRow>}
-          {iface.via?.length > 0 && (
-            <InfoRow label="Via"><ViaPath via={iface.via} /></InfoRow>
-          )}
+          {iface.functional_domain   && <InfoRow label="Domain">{iface.functional_domain}</InfoRow>}
+          {iface.via?.length > 0     && <InfoRow label="Via"><ViaPath via={iface.via} /></InfoRow>}
           {iface.description && (
             <div style={{ marginTop: '4px' }}>
               <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)', fontWeight: 600, marginBottom: '4px' }}>Description</div>
@@ -471,37 +599,76 @@ function DetailPanel({
             />
           ))}
           {iface.receivers.length === 0 && !addRecv && (
-            <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)', padding: '8px 0' }}>No receivers yet.</div>
+            <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)', padding: '8px 0' }}>
+              No receivers yet.
+            </div>
           )}
 
           {addRecv ? (
-            <div style={{ padding: '8px', border: '1px solid var(--sapList_BorderColor)', borderRadius: '4px', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <select style={F} value={newRecv.system_id} onChange={e => setNewRecv(r => ({ ...r, system_id: e.target.value }))}>
-                <option value="">— select system —</option>
-                {systems.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+            <div style={{
+              padding: '8px', border: '1px solid var(--sapList_BorderColor)',
+              borderRadius: '4px', marginTop: '6px',
+              display: 'flex', flexDirection: 'column', gap: '6px',
+            }}>
+              <Select
+                style={{ width: '100%' } as React.CSSProperties}
+                onChange={e => setNewRecv(r => ({ ...r, system_id: selVal(e) }))}
+              >
+                <Option value="" selected={!newRecv.system_id}>— select system —</Option>
+                {systems.map(s => (
+                  <Option key={s.id} value={s.id} selected={newRecv.system_id === s.id}>{s.name}</Option>
+                ))}
+              </Select>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                <select style={F} value={newRecv.transport} onChange={e => setNewRecv(r => ({ ...r, transport: e.target.value }))}>
-                  {TRANSPORTS.map(t => <option key={t} value={t}>{t || '—'}</option>)}
-                </select>
-                <select style={F} value={newRecv.auth_type} onChange={e => setNewRecv(r => ({ ...r, auth_type: e.target.value }))}>
-                  {AUTH_TYPES.map(a => <option key={a} value={a}>{a || '—'}</option>)}
-                </select>
+                <Select
+                  style={{ width: '100%' } as React.CSSProperties}
+                  onChange={e => setNewRecv(r => ({ ...r, transport: selVal(e) }))}
+                >
+                  {TRANSPORTS.map(t => (
+                    <Option key={t} value={t} selected={newRecv.transport === t}>{t || '—'}</Option>
+                  ))}
+                </Select>
+                <Select
+                  style={{ width: '100%' } as React.CSSProperties}
+                  onChange={e => setNewRecv(r => ({ ...r, auth_type: selVal(e) }))}
+                >
+                  {AUTH_TYPES.map(a => (
+                    <Option key={a} value={a} selected={newRecv.auth_type === a}>{a || '—'}</Option>
+                  ))}
+                </Select>
               </div>
-              <input style={F} value={newRecv.credential_alias} onChange={e => setNewRecv(r => ({ ...r, credential_alias: e.target.value }))} placeholder="Credential alias" />
+              <Input
+                value={newRecv.credential_alias}
+                placeholder="Credential alias"
+                style={{ width: '100%' } as React.CSSProperties}
+                onInput={e => setNewRecv(r => ({ ...r, credential_alias: (e.target as unknown as HTMLInputElement).value }))}
+              />
               <div style={{ fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)' }}>Via (pre-receiver hops)</div>
-              <ViaEditor value={newRecv.via} onChange={via => setNewRecv(r => ({ ...r, via }))} platforms={api.config.platforms} systems={api.systems} />
+              <ViaEditor
+                value={newRecv.via}
+                onChange={via => setNewRecv(r => ({ ...r, via }))}
+                platforms={api.config.platforms}
+                systems={api.systems}
+              />
               <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                <button style={btnStyle('default')} onClick={() => { setAddRecv(false); setNewRecv({ system_id: '', transport: '', auth_type: '', credential_alias: '', via: [] }) }}>Cancel</button>
-                <button style={btnStyle('primary')} onClick={async () => {
+                <Button onClick={() => {
+                  setAddRecv(false)
+                  setNewRecv({ system_id: '', transport: '', auth_type: '', credential_alias: '', via: [] })
+                }}>Cancel</Button>
+                <Button design="Emphasized" onClick={async () => {
                   await api.addReceiver(iface.id, { ...newRecv, system_id: newRecv.system_id || null })
                   setAddRecv(false)
                   setNewRecv({ system_id: '', transport: '', auth_type: '', credential_alias: '', via: [] })
-                }}>Add</button>
+                }}>Add</Button>
               </div>
             </div>
           ) : (
-            <button style={{ ...btnStyle('default'), marginTop: '6px', textAlign: 'left' }} onClick={() => setAddRecv(true)}>+ Add Receiver</button>
+            <Button
+              style={{ marginTop: '6px', textAlign: 'left' } as React.CSSProperties}
+              onClick={() => setAddRecv(true)}
+            >
+              + Add Receiver
+            </Button>
           )}
         </div>
       )}
@@ -509,7 +676,11 @@ function DetailPanel({
   )
 }
 
-// ── Multi-select dropdown ─────────────────────────────────────────────────────
+// ── Multi-select dropdown filter pill ────────────────────────────────────────
+// The trigger uses a native <button> to achieve the pill shape; converting to
+// UI5 Button would require overriding its border-radius and internal padding
+// in ways that are not guaranteed stable across UI5 versions. The Clear button
+// inside the open dropdown uses UI5 Button.
 
 function MultiDropdown({
   label, options, selected, onChange,
@@ -562,10 +733,15 @@ function MultiDropdown({
           minWidth: '150px', overflow: 'hidden',
         }}>
           {selected.length > 0 && (
-            <button
-              onClick={() => onChange([])}
-              style={{ width: '100%', padding: '5px 10px', border: 'none', cursor: 'pointer', background: 'transparent', textAlign: 'left', fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem', color: 'var(--sapHighlightColor)', borderBottom: '1px solid var(--sapList_BorderColor)' }}
-            >Clear</button>
+            <div style={{ borderBottom: '1px solid var(--sapList_BorderColor)' }}>
+              <Button
+                design="Transparent"
+                onClick={() => onChange([])}
+                style={{ width: '100%', fontSize: '0.72rem', color: 'var(--sapHighlightColor)' } as React.CSSProperties}
+              >
+                Clear
+              </Button>
+            </div>
           )}
           {options.map(opt => (
             <label key={opt.value} style={{
@@ -587,11 +763,26 @@ function MultiDropdown({
 
 // ── Interface row ─────────────────────────────────────────────────────────────
 
-function InterfaceRow({ iface, systems, selected, onClick }: { iface: Interface; systems: System[]; selected: boolean; onClick: () => void }) {
+function InterfaceRow({ iface, systems, selected, onClick }: {
+  iface:    Interface
+  systems:  System[]
+  selected: boolean
+  onClick:  () => void
+}) {
   const senderName = systems.find(s => s.id === iface.sender_system_id)?.name ?? '—'
   const receivers  = iface.receivers.map(r => systems.find(s => s.id === r.system_id)?.name).filter(Boolean).join(', ') || '—'
   return (
-    <div onClick={onClick} data-iface-id={iface.id} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 140px 80px 90px', gap: '0 12px', padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--sapList_BorderColor)', background: selected ? 'var(--sapList_SelectionBackgroundColor)' : 'transparent', alignItems: 'center' }}>
+    <div
+      onClick={onClick}
+      data-iface-id={iface.id}
+      style={{
+        display: 'grid', gridTemplateColumns: '100px 1fr 140px 140px 80px 90px',
+        gap: '0 12px', padding: '8px 12px', cursor: 'pointer',
+        borderBottom: '1px solid var(--sapList_BorderColor)',
+        background: selected ? 'var(--sapList_SelectionBackgroundColor)' : 'transparent',
+        alignItems: 'center',
+      }}
+    >
       <code style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)' }}>{iface.ref}</code>
       <div style={{ overflow: 'hidden' }}>
         <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--sapTextColor)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{iface.name}</div>
@@ -632,7 +823,6 @@ export default function RegistryGrid({ initialSenderSystemId, initialReceiverSys
     if (pairFilter) {
       const { sender: a, receiver: b } = pairFilter
       list = list.filter(i =>
-        // A→B or B→A — both directions since the architecture edge is undirected
         (i.sender_system_id === a && i.receivers.some(r => r.system_id === b)) ||
         (i.sender_system_id === b && i.receivers.some(r => r.system_id === a))
       )
@@ -659,20 +849,20 @@ export default function RegistryGrid({ initialSenderSystemId, initialReceiverSys
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* Toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', padding: '8px 12px', borderBottom: '1px solid var(--sapList_BorderColor)', background: 'var(--sapGroup_TitleBackground)', flexShrink: 0 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
+          padding: '8px 12px', borderBottom: '1px solid var(--sapList_BorderColor)',
+          background: 'var(--sapGroup_TitleBackground)', flexShrink: 0,
+        }}>
           {onBack && (
-            <button
-              onClick={onBack}
-              style={{ ...btnStyle('default'), display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}
-            >
-              ← Back
-            </button>
+            <Button icon="nav-back" onClick={onBack}>Back</Button>
           )}
-          <input
+          <Input
             placeholder="Search name, ref, build ref…"
             value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ padding: '4px 10px', border: '1px solid var(--sapList_BorderColor)', borderRadius: '14px', fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', background: 'var(--sapBackgroundColor)', color: 'var(--sapTextColor)', width: '200px' }}
+            showClearIcon
+            style={{ width: '220px' } as React.CSSProperties}
+            onInput={e => setSearch((e.target as unknown as HTMLInputElement).value)}
           />
           <MultiDropdown
             label="Status"
@@ -687,15 +877,23 @@ export default function RegistryGrid({ initialSenderSystemId, initialReceiverSys
             onChange={setTypes}
           />
           {pairFilter && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 10px', borderRadius: '12px', background: 'var(--sapInformativeBackground)', border: '1px solid var(--sapInformativeColor)', fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem', color: 'var(--sapTextColor)' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '3px 10px', borderRadius: '12px',
+              background: 'var(--sapInformativeBackground)',
+              border: '1px solid var(--sapInformativeColor)',
+              fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem', color: 'var(--sapTextColor)',
+            }}>
               {senderName} → {receiverName}
-              <button onClick={() => setPairFilter(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.8rem', lineHeight: 1 }}>✕</button>
+              <Button design="Transparent" icon="decline" onClick={() => setPairFilter(null)} style={{ padding: 0, minWidth: 0 } as React.CSSProperties} />
             </div>
           )}
           <span style={{ marginLeft: 'auto', fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem', color: 'var(--sapContent_LabelColor)' }}>
             {filtered.length} of {api.interfaces.length}
           </span>
-          <button style={btnStyle('primary')} onClick={() => { setSelectedId(null); setCreating(true) }}>+ New Interface</button>
+          <Button design="Emphasized" icon="add" onClick={() => { setSelectedId(null); setCreating(true) }}>
+            New Interface
+          </Button>
         </div>
 
         {/* Column headers */}
@@ -707,15 +905,24 @@ export default function RegistryGrid({ initialSenderSystemId, initialReceiverSys
 
         {/* Rows */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {api.loading && <div style={{ padding: '2rem', textAlign: 'center', fontFamily: 'var(--sapFontFamily)', fontSize: '0.875rem', color: 'var(--sapContent_LabelColor)' }}>Loading…</div>}
+          {api.loading && (
+            <div style={{ padding: '2rem', textAlign: 'center', fontFamily: 'var(--sapFontFamily)', fontSize: '0.875rem', color: 'var(--sapContent_LabelColor)' }}>
+              Loading…
+            </div>
+          )}
           {!api.loading && filtered.length === 0 && (
             <div style={{ padding: '2rem', textAlign: 'center', fontFamily: 'var(--sapFontFamily)', fontSize: '0.875rem', color: 'var(--sapContent_LabelColor)' }}>
               {api.interfaces.length === 0 ? 'No interfaces yet — click New Interface to add one.' : 'No interfaces match the current filters.'}
             </div>
           )}
           {filtered.map(iface => (
-            <InterfaceRow key={iface.id} iface={iface} systems={api.systems} selected={selectedId === iface.id}
-              onClick={() => { setCreating(false); setSelectedId(p => p === iface.id ? null : iface.id) }} />
+            <InterfaceRow
+              key={iface.id}
+              iface={iface}
+              systems={api.systems}
+              selected={selectedId === iface.id}
+              onClick={() => { setCreating(false); setSelectedId(p => p === iface.id ? null : iface.id) }}
+            />
           ))}
         </div>
       </div>
@@ -742,14 +949,34 @@ export default function RegistryGrid({ initialSenderSystemId, initialReceiverSys
 
 // ── Shared panel + helpers ────────────────────────────────────────────────────
 
-function Panel({ title, children, onClose, action }: { title: string; children: React.ReactNode; onClose: () => void; action?: React.ReactNode }) {
+function Panel({ title, children, onClose, action }: {
+  title:    string
+  children: React.ReactNode
+  onClose:  () => void
+  action?:  React.ReactNode
+}) {
   return (
-    <div style={{ width: '380px', flexShrink: 0, borderLeft: '1px solid var(--sapList_BorderColor)', background: 'var(--sapGroup_ContentBackground)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--sapList_BorderColor)', background: 'var(--sapGroup_TitleBackground)', flexShrink: 0 }}>
-        <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--sapTextColor)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: '8px' }}>{title}</span>
-        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+    <div style={{
+      width: '380px', flexShrink: 0,
+      borderLeft: '1px solid var(--sapList_BorderColor)',
+      background: 'var(--sapGroup_ContentBackground)',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 14px', borderBottom: '1px solid var(--sapList_BorderColor)',
+        background: 'var(--sapGroup_TitleBackground)', flexShrink: 0,
+      }}>
+        <span style={{
+          fontFamily: 'var(--sapFontFamily)', fontSize: '0.875rem', fontWeight: 'bold',
+          color: 'var(--sapTextColor)', overflow: 'hidden', textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap', flex: 1, marginRight: '8px',
+        }}>
+          {title}
+        </span>
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>
           {action}
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: 'var(--sapTextColor)', lineHeight: 1 }}>✕</button>
+          <Button design="Transparent" icon="decline" onClick={onClose} />
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px' }}>{children}</div>

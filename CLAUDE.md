@@ -177,6 +177,68 @@ Per-fragment variants with project scoping. Global defaults seeded on startup (1
 - [ ] E2E tests
 - [ ] Logical groups management UI (list/edit/delete outside of interface form inline creation)
 
+## Deployment Target
+
+Production target is **Kyma (Kubernetes on SAP BTP)**. Docker Compose is for local development only.
+- Network isolation in production is handled by Kubernetes Services (ClusterIP) and NetworkPolicies — not docker-compose port bindings
+- Secrets in production must use Kubernetes Secrets, not `.env` files or hardcoded constants
+- `DEPLOYMENT_ENV=local` and `AUTH_BYPASS_ENABLED=true` must never be set in Kyma — the auth bypass is dev-only by design
+- The SSRF risk (C-2) is **elevated** in Kubernetes: the cluster network includes the K8s API server, cloud metadata endpoint (`169.254.169.254`), and other workloads
+
+## Security Backlog
+
+Issues identified by audit (2026-05-18). When touching related code, fix or avoid reintroducing these patterns.
+
+### Critical
+- [ ] **C-1 Groovy sandboxing** — `groovy-runner/ScriptExecutor.groovy` — apply `SecureASTCustomizer` to block `Runtime`, `ProcessBuilder`, `File`, and network classes; in Kyma run the pod with no egress NetworkPolicy and no volume mounts
+- [ ] **C-2 SSRF in HTTP proxy** — `internal/api/httpclient.go` — block RFC-1918 ranges (10/8, 172.16/12, 192.168/16, 169.254/16, 127/8) and the K8s metadata endpoint before forwarding; allowlist CPI tenant domains only
+
+### High
+- [ ] **H-2 OData filter injection** — `internal/api/monitoring.go` — allowlist `status` values; sanitise `iFlowID`, `packageID`, `idSearch` (alphanumeric + hyphens only) before interpolating into `$filter`
+- [ ] **H-3 TLS private key in DB** — `internal/api/mock.go` — block `mode=custom` uploads in non-local environments; in Kyma use a Kubernetes Secret or cert-manager instead
+- [ ] **H-4 Credential endpoint no RBAC** — `internal/api/instances.go:322` — gate `GET basic-auth` and SFTP config behind project membership role check
+
+### Medium
+- [ ] **M-1 No request body size limit** — `internal/api/handler.go` `decode()` — wrap body in `http.MaxBytesReader(w, r.Body, 4<<20)` before decoding
+- [ ] **M-2 Hardcoded dev encryption key** — `cmd/api/main.go` — in Kyma, `ENC_KEY` must be set from a Kubernetes Secret; add a startup guard that refuses to start in non-local environments if `ENC_KEY` is unset or is the zero key
+- [ ] **M-5 SSRF in scheduled jobs** — `internal/api/scheduler.go` — apply same URL restrictions as C-2 to HTTP job execution
+
+### Local Dev Only (not applicable to Kyma)
+- ~~M-6 Postgres port on 0.0.0.0~~ — irrelevant; Kyma uses ClusterIP Services
+- ~~M-7 Mock server port on 0.0.0.0~~ — irrelevant; Kyma uses ClusterIP Services
+- ~~H-1 Auth bypass default true~~ — docker-compose local dev only; `DEPLOYMENT_ENV` will not be `local` in Kyma
+
+### Go Code Quality Backlog (audit 2026-05-18)
+- [ ] **Scheduler context leak** — `cmd/api/main.go` / `scheduler.go` — pass cancellable context from main; cancel before `srv.Shutdown`
+- [ ] **Context use-after-cancel in mock goroutines** — `internal/api/mock.go:148` — use `context.WithoutCancel(r.Context())` for fire-and-forget DB writes
+- [ ] **Non-transactional migrations** — `internal/db/migrate.go` — wrap each migration + schema_migrations insert in a transaction
+- [ ] **TOCTOU in deleteVariant** — `scaffold_template_store.go:372` — wrap check + delete in a transaction
+- [ ] **matchPath wildcard bug** — `internal/api/mock.go:48` — fix prefix match: `path == prefix || strings.HasPrefix(path, prefix+"/")`
+- [ ] **sftpDeleteEntry can delete root** — `internal/api/sftpfiles.go:165` — reject deletion when `abs == root`
+- [ ] **DB error masked as 404** — multiple handlers — check `err != nil` → 500 separately from `RowsAffected() == 0` → 404
+- [ ] **JWKS fetch holds write lock** — `internal/auth/oidc.go:185` — fetch outside lock, re-acquire to update `p.keys`
+- [ ] **crypto/rand for ref generation** — `internal/ifregistry/interfaces.go:91` — replace `math/rand.Intn` with `crypto/rand`
+
+## Security Standards — Apply When Writing New Code
+
+These rules prevent reintroduction of audited issues. Check them whenever touching the relevant areas:
+
+1. **HTTP proxy / outbound requests** — always validate destination URL against RFC-1918 blocklist (and `169.254.169.254` for K8s metadata) before making outbound calls. Never forward to arbitrary user-supplied URLs without an allowlist.
+2. **OData / external query strings** — never interpolate query parameters directly into filter strings. Allowlist enum values; escape or reject free-text inputs.
+3. **Request body decoding** — always use `http.MaxBytesReader(w, r.Body, N)` before `json.NewDecoder`. 4 MB is the default cap unless the endpoint specifically handles larger payloads.
+4. **Error responses** — never return `err.Error()` directly to the client. Log the full error; return a generic message to the caller.
+5. **DB error handling** — always check `err != nil` (→ 500) separately from `RowsAffected() == 0` (→ 404). Never conflate them.
+6. **Goroutines** — fire-and-forget goroutines that do DB writes must use `context.WithoutCancel(r.Context())`, not `r.Context()` directly.
+7. **Random identifiers** — use `crypto/rand` for all generated IDs, refs, and tokens. Never use `math/rand`.
+8. **Config key validation** — any endpoint that writes to `registry_config` must validate the key against a known allowlist.
+9. **Scheduler HTTP jobs** — apply same SSRF mitigations as the HTTP proxy to any scheduler-executed HTTP request.
+10. **Secrets in Kyma** — `ENC_KEY` and any credentials must come from Kubernetes Secrets mounted as env vars. Never hardcode or default to zero/dev values in non-local deployments. Add a startup guard.
+
+## Registry V2 Diagram Rules (locked in 2026-05-18)
+
+- **Flow diagram**: business systems ALWAYS left and right. Integration components ALWAYS in the middle. Even for scheduled/event triggers (where the component initiates), the source system appears on the LEFT with a bidirectional "trigger / fetch" edge to the component. API callouts float ABOVE their component hop as separate boxes — the main horizontal flow line stays clean.
+- **Architecture diagram (V2)**: skip all integration components. Draw business system → business system edges only, with interface counts. Use `trigger_system_id` or `source_system_id` as the left node; `receiver.system_id` as the right node. No via hops appear here.
+
 ## Key Architecture Decisions
 
 - **Auth bypass**: Only active when `DEPLOYMENT_ENV=local` AND `AUTH_BYPASS_ENABLED=true`.

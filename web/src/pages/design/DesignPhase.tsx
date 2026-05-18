@@ -10,6 +10,8 @@ import ProjectSetup from './ProjectSetup'
 import ProjectAdapterTemplates from '../../tools/ProjectAdapterTemplates'
 import ArchitectureView from '../registry/ArchitectureView'
 import RegistryGrid from '../registry/RegistryGrid'
+import RegistryGridV2 from '../registry/RegistryGridV2'
+import FlowDiagramV2  from '../registry/FlowDiagramV2'
 import SystemView from '../registry/SystemView'
 import FlowDiagram from '../registry/FlowDiagram'
 import GroupDiagramSvg from '../registry/GroupDiagramSvg'
@@ -176,6 +178,8 @@ const DESIGN_NAV = [
   { id: 'group',         label: 'Group Diagram', icon: 'group'                       },
   { id: 'registry',      label: 'Registry',      icon: 'detail-view'                 },
   { id: 'systems',       label: 'Systems',       icon: 'it-system'                   },
+  { id: 'registry-v2',   label: 'Registry V2 ⚒', icon: 'lab'                        },
+  { id: 'flow-v2',       label: 'Flow V2 ⚒',     icon: 'process'                    },
 ]
 
 function PhasePlaceholder({ title, description }: { title: string; description: string }) {
@@ -283,12 +287,15 @@ export default function DesignPhase() {
               }
             />
           )}
-          {id === 'systems' && <SystemView />}
+          {id === 'systems'     && <SystemView />}
+          {id === 'registry-v2' && <RegistryGridV2 />}
+          {id === 'flow-v2'     && <FlowDiagramV2 />}
         </>
       )}
     </PhaseLayout>
   )
 }
+
 
 // ── Shared sub-components ─────────────────────────────────────────────────────
 
