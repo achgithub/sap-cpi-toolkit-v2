@@ -185,16 +185,21 @@ export default function ArchitectureCanvasV2({ systems, edges, config, statusCon
   const layoutKey     = systems.map(s => s.id).sort().join(',')
   const layoutGen     = useRef(0)
   const prevLayoutKey = useRef('')
+  const prevAlgo      = useRef<LayoutAlgo>('stress')
 
   useEffect(() => {
-    const isNewData = prevLayoutKey.current !== layoutKey
+    const isNewData   = prevLayoutKey.current !== layoutKey
+    const algoChanged = prevAlgo.current !== layoutAlgo
     prevLayoutKey.current = layoutKey
+    prevAlgo.current      = layoutAlgo
     const gen = ++layoutGen.current
 
     elkLayout(systems, pairs, layoutAlgo).then(({ pos: layout, sections }) => {
       if (gen !== layoutGen.current) return
       setEdgeSections(sections)
+
       if (isNewData) {
+        // System set changed — restore saved positions from DB, fall back to ELK
         setSectionsValid(false)
         setPos(() => {
           const next: Record<string, Point> = {}
@@ -205,13 +210,18 @@ export default function ArchitectureCanvasV2({ systems, edges, config, statusCon
           })
           return next
         })
-      } else {
+      } else if (algoChanged) {
+        // User explicitly switched layout algorithm — apply ELK everywhere
         setSectionsValid(Object.keys(sections).length > 0)
         setPos(() => {
           const next: Record<string, Point> = {}
           systems.forEach(s => { next[s.id] = layout[s.id] ?? { x: 60, y: 60 } })
           return next
         })
+      } else {
+        // Only edges changed (filter update with same systems) — refresh routing
+        // but leave node positions exactly where the user placed them
+        setSectionsValid(Object.keys(sections).length > 0)
       }
     })
   }, [layoutKey, pairs, layoutAlgo]) // eslint-disable-line react-hooks/exhaustive-deps
