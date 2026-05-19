@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Button, Input, MessageStrip, Dialog, Bar } from '@ui5/webcomponents-react'
-import type { SystemTypeConfig, InfraTypeConfig } from '../pages/registry/types'
+import type { SystemTypeConfig, InfraTypeConfig, System } from '../pages/registry/types'
 import type { Component } from '../pages/registry/types_v2'
 
+const SYS_BASE  = '/api/interfaces/systems'
 const CFG_BASE  = '/api/interfaces/config'
 const COMP_BASE = '/api/interfaces/v2/components'
 
@@ -602,12 +603,186 @@ function IntegrationComponentEditor() {
   )
 }
 
+// ── Tab 4: Systems ────────────────────────────────────────────────────────────
+
+type SystemForm = {
+  name: string; description: string
+  system_type: string; infra_type: string; infra_region: string; owner_type: string
+  managed_by: string; deployment_type: string; owner: string
+}
+const emptySysForm = (): SystemForm => ({
+  name: '', description: '', system_type: '', infra_type: '', infra_region: '',
+  owner_type: 'internal', managed_by: '', deployment_type: '', owner: '',
+})
+
+function SystemEditor() {
+  const [systems,         setSystems]         = useState<System[]>([])
+  const [sysTypes,        setSysTypes]        = useState<SystemTypeConfig[]>([])
+  const [infraTypes,      setInfraTypes]      = useState<InfraTypeConfig[]>([])
+  const [managedByTypes,  setManagedByTypes]  = useState<{ name: string; color: string }[]>([])
+  const [deploymentTypes, setDeploymentTypes] = useState<{ name: string }[]>([])
+  const [ownerTypes,      setOwnerTypes]      = useState<{ name: string }[]>([])
+  const [form,            setForm]            = useState<SystemForm>(emptySysForm())
+  const [editId,          setEditId]          = useState<string | null>(null)
+  const [dlgOpen,         setDlgOpen]         = useState(false)
+  const [saving,          setSaving]          = useState(false)
+  const [error,           setError]           = useState('')
+
+  useEffect(() => {
+    fetch(SYS_BASE).then(r => r.json()).then((d: System[]) =>
+      setSystems(d.sort((a, b) => a.name.localeCompare(b.name)))
+    ).catch(() => {})
+    fetch(`${CFG_BASE}/system_types`).then(r => r.json()).then(setSysTypes).catch(() => {})
+    fetch(`${CFG_BASE}/infra_types`).then(r => r.json()).then(setInfraTypes).catch(() => {})
+    fetch(`${CFG_BASE}/managed_by_types`).then(r => r.ok ? r.json() : []).then(setManagedByTypes).catch(() => {})
+    fetch(`${CFG_BASE}/deployment_types`).then(r => r.ok ? r.json() : []).then(setDeploymentTypes).catch(() => {})
+    fetch(`${CFG_BASE}/owner_types`).then(r => r.ok ? r.json() : []).then(setOwnerTypes).catch(() => {})
+  }, [])
+
+  function openCreate() { setEditId(null); setForm(emptySysForm()); setError(''); setDlgOpen(true) }
+  function openEdit(s: System) {
+    setEditId(s.id)
+    setForm({ name: s.name, description: s.description, system_type: s.system_type, infra_type: s.infra_type, infra_region: s.infra_region, owner_type: s.owner_type || 'internal', managed_by: s.managed_by || '', deployment_type: s.deployment_type || '', owner: s.owner || '' })
+    setError(''); setDlgOpen(true)
+  }
+  function closeDialog() { setDlgOpen(false); setEditId(null) }
+
+  async function save() {
+    if (!form.name.trim()) { setError('Name is required'); return }
+    setSaving(true); setError('')
+    try {
+      if (editId) {
+        const res = await fetch(`${SYS_BASE}/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+        if (!res.ok) throw new Error('Save failed')
+        const updated = await res.json() as System
+        setSystems(prev => prev.map(s => s.id === editId ? updated : s).sort((a, b) => a.name.localeCompare(b.name)))
+      } else {
+        const res = await fetch(SYS_BASE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+        if (!res.ok) throw new Error('Save failed')
+        const created = await res.json() as System
+        setSystems(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)))
+      }
+      closeDialog()
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    finally { setSaving(false) }
+  }
+
+  async function archive(id: string) {
+    if (!window.confirm('Archive this system? It will be hidden from all views.')) return
+    try {
+      await fetch(`${SYS_BASE}/${id}/archive`, { method: 'POST' })
+      setSystems(prev => prev.filter(s => s.id !== id))
+    } catch { /* ignore */ }
+  }
+
+  function getColor(systemType: string) {
+    return sysTypes.find(t => t.name === systemType)?.color ?? '#78909C'
+  }
+
+  const f = (k: keyof SystemForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm(p => ({ ...p, [k]: e.target.value }))
+
+  return (
+    <Section title="Systems" hint="The business systems in your integration landscape. Referenced by interfaces as senders and receivers." action={<Button design="Transparent" icon="add" onClick={openCreate}>New System</Button>}>
+
+      {systems.length === 0 && (
+        <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)', padding: '8px 0' }}>
+          No systems registered. Click New System to add one.
+        </div>
+      )}
+
+      {systems.map(s => {
+        const color = getColor(s.system_type)
+        const infra = [s.infra_type, s.infra_region].filter(Boolean).join(' · ')
+        return (
+          <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--sapList_BorderColor)' }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', fontWeight: 600, color: 'var(--sapTextColor)' }}>{s.name}</div>
+              {(s.system_type || infra) && (
+                <div style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)' }}>
+                  {[s.system_type, infra].filter(Boolean).join(' — ')}
+                </div>
+              )}
+            </div>
+            <Button design="Transparent" icon="edit"  onClick={() => openEdit(s)} />
+            <Button design="Transparent" icon="away"  title="Archive this system" onClick={() => archive(s.id)} />
+          </div>
+        )
+      })}
+
+      <Dialog open={dlgOpen} headerText={editId ? 'Edit System' : 'New System'} onClose={closeDialog} style={{ width: '460px', maxWidth: '95vw' }}>
+        <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {error && <MessageStrip design="Negative" hideCloseButton>{error}</MessageStrip>}
+          <FormField label="Name *">
+            <Input value={form.name} onInput={e => setForm(p => ({ ...p, name: (e.target as unknown as HTMLInputElement).value }))} style={{ width: '100%' }} />
+          </FormField>
+          <FormField label="Description">
+            <Input value={form.description} onInput={e => setForm(p => ({ ...p, description: (e.target as unknown as HTMLInputElement).value }))} style={{ width: '100%' }} />
+          </FormField>
+          <FormField label="System Type">
+            <select value={form.system_type} onChange={f('system_type')} style={{ ...nativeSelect, width: '100%' }}>
+              <option value="">— select type —</option>
+              {sysTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+            </select>
+          </FormField>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <FormField label="Infrastructure">
+              <select value={form.infra_type} onChange={f('infra_type')} style={{ ...nativeSelect, width: '100%' }}>
+                <option value="">— unknown —</option>
+                {infraTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+              </select>
+            </FormField>
+            <FormField label="Region / Location">
+              <Input value={form.infra_region} placeholder="e.g. eu-west-1" onInput={e => setForm(p => ({ ...p, infra_region: (e.target as unknown as HTMLInputElement).value }))} />
+            </FormField>
+          </div>
+          <FormField label="Owner (internal / partner / external)">
+            <select value={form.owner_type} onChange={f('owner_type')} style={{ ...nativeSelect, width: '100%' }}>
+              <option value="internal">Internal</option>
+              <option value="partner">Partner</option>
+              <option value="external">External</option>
+            </select>
+          </FormField>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <FormField label="Managed By">
+              <select value={form.managed_by} onChange={f('managed_by')} style={{ ...nativeSelect, width: '100%' }}>
+                <option value="">— unknown —</option>
+                {managedByTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+              </select>
+            </FormField>
+            <FormField label="Deployment Type">
+              <select value={form.deployment_type} onChange={f('deployment_type')} style={{ ...nativeSelect, width: '100%' }}>
+                <option value="">— unknown —</option>
+                {deploymentTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+              </select>
+            </FormField>
+          </div>
+          <FormField label="Business Owner">
+            <select value={form.owner} onChange={f('owner')} style={{ ...nativeSelect, width: '100%' }}>
+              <option value="">— unassigned —</option>
+              {ownerTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+            </select>
+          </FormField>
+        </div>
+        <Bar slot="footer">
+          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '0 0.5rem' }}>
+            <Button onClick={closeDialog}>Cancel</Button>
+            <Button design="Emphasized" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+          </div>
+        </Bar>
+      </Dialog>
+    </Section>
+  )
+}
+
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 
 const TABS = [
   { id: 'system-types',   label: 'System Types'   },
   { id: 'infra-types',    label: 'Infra Types'    },
   { id: 'system-detail',  label: 'System Detail'  },
+  { id: 'systems',        label: 'Systems'        },
   { id: 'statuses',       label: 'Statuses'       },
   { id: 'comp-types',     label: 'Component Types'},
   { id: 'components',     label: 'Components'     },
@@ -647,6 +822,7 @@ export default function RegistrySettings() {
         {tab === 'system-types'  && <SystemTypeEditor />}
         {tab === 'infra-types'   && <InfraTypeEditor />}
         {tab === 'system-detail' && <SystemDetailTab />}
+        {tab === 'systems'       && <SystemEditor />}
         {tab === 'statuses'      && <StatusEditor />}
         {tab === 'comp-types'    && <ComponentTypeEditor />}
         {tab === 'components'    && <IntegrationComponentEditor />}
