@@ -350,33 +350,54 @@ export default function ArchitectureCanvasV2({ systems, edges, config, statusCon
 
           {/* System nodes */}
           {systems.map(s => {
-            const p         = pos[s.id] ?? { x: 60, y: 60 }
-            const color     = getSystemColor(s.system_type, config)
-            const infraLine = [s.infra_type, s.infra_region].filter(Boolean).join(' · ')
+            const p            = pos[s.id] ?? { x: 60, y: 60 }
+            const typeColor    = getSystemColor(s.system_type, config)
+            const lc           = s.lifecycle_status || 'active'
+            const isRetiring   = lc === 'retiring'
+            const isDecomm     = lc === 'decommissioned'
+            const isPlanned    = lc === 'planned'
+            const strokeColor  = isRetiring ? '#F59E0B' : isDecomm ? '#9E9E9E' : typeColor
+            const stripeColor  = isRetiring ? '#F59E0B' : isDecomm ? '#9E9E9E' : typeColor
+            const nodeOpacity  = isDecomm ? 0.45 : 1
+            const infraLine    = [s.infra_type, s.infra_region].filter(Boolean).join(' · ')
             return (
               <g key={s.id} transform={`translate(${p.x},${p.y})`} style={{ cursor: 'grab' }}
-                onMouseDown={e => onNodeMouseDown(e, s.id)}>
-                <rect width={NODE_W} height={NODE_H} rx={6} fill="var(--sapTile_Background)" stroke={color} strokeWidth={2} />
-                <rect width={NODE_W} height={6} rx={6} fill={color} />
-                <rect width={NODE_W} height={3} y={3} fill={color} />
-                <text x={NODE_W / 2} y={30} textAnchor="middle" dominantBaseline="middle"
+                onMouseDown={e => onNodeMouseDown(e, s.id)} opacity={nodeOpacity}>
+                <rect width={NODE_W} height={NODE_H} rx={6} fill="var(--sapTile_Background)"
+                  stroke={strokeColor} strokeWidth={isRetiring ? 2.5 : 2}
+                  strokeDasharray={isPlanned ? '6 3' : undefined} />
+                <rect width={NODE_W} height={6} rx={6} fill={stripeColor} />
+                <rect width={NODE_W} height={3} y={3} fill={stripeColor} />
+                <text x={NODE_W / 2} y={28} textAnchor="middle" dominantBaseline="middle"
                   fontSize={13} fontWeight="bold" fill="var(--sapTextColor)" fontFamily="var(--sapFontFamily)"
                   style={{ userSelect: 'none', pointerEvents: 'none' }}>
                   {s.name.length > 18 ? s.name.slice(0, 17) + '…' : s.name}
                 </text>
                 {s.system_type && (
-                  <text x={NODE_W / 2} y={52} textAnchor="middle" dominantBaseline="middle"
-                    fontSize={10} fill={color} fontFamily="var(--sapFontFamily)"
+                  <text x={NODE_W / 2} y={48} textAnchor="middle" dominantBaseline="middle"
+                    fontSize={10} fill={typeColor} fontFamily="var(--sapFontFamily)"
                     style={{ userSelect: 'none', pointerEvents: 'none' }}>
                     {s.system_type}
                   </text>
                 )}
                 {infraLine && (
-                  <text x={NODE_W / 2} y={70} textAnchor="middle" dominantBaseline="middle"
+                  <text x={NODE_W / 2} y={65} textAnchor="middle" dominantBaseline="middle"
                     fontSize={9} fill="var(--sapContent_LabelColor)" fontFamily="var(--sapFontFamily)"
                     style={{ userSelect: 'none', pointerEvents: 'none' }}>
                     {infraLine}
                   </text>
+                )}
+                {/* Lifecycle badge — shown for non-active statuses */}
+                {lc !== 'active' && (
+                  <g style={{ pointerEvents: 'none' }}>
+                    <rect x={NODE_W / 2 - 30} y={80} width={60} height={13} rx={6}
+                      fill={strokeColor} opacity={0.18} />
+                    <text x={NODE_W / 2} y={86.5} textAnchor="middle" dominantBaseline="middle"
+                      fontSize={8} fontWeight="bold" fill={strokeColor} fontFamily="var(--sapFontFamily)"
+                      style={{ userSelect: 'none' }}>
+                      {lc === 'retiring' ? '⚠ Retiring' : lc === 'planned' ? 'Planned' : 'Decommissioned'}
+                    </text>
+                  </g>
                 )}
               </g>
             )

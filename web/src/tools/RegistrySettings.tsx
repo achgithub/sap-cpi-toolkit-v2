@@ -606,13 +606,13 @@ function IntegrationComponentEditor() {
 // ── Tab 4: Systems ────────────────────────────────────────────────────────────
 
 type SystemForm = {
-  name: string; description: string
+  name: string; description: string; vendor: string
   system_type: string; infra_type: string; infra_region: string; owner_type: string
-  managed_by: string; deployment_type: string; owner: string
+  managed_by: string; deployment_type: string; owner: string; lifecycle_status: string
 }
 const emptySysForm = (): SystemForm => ({
-  name: '', description: '', system_type: '', infra_type: '', infra_region: '',
-  owner_type: 'internal', managed_by: '', deployment_type: '', owner: '',
+  name: '', description: '', vendor: '', system_type: '', infra_type: '', infra_region: '',
+  owner_type: 'internal', managed_by: '', deployment_type: '', owner: '', lifecycle_status: 'active',
 })
 
 function SystemEditor() {
@@ -642,7 +642,7 @@ function SystemEditor() {
   function openCreate() { setEditId(null); setForm(emptySysForm()); setError(''); setDlgOpen(true) }
   function openEdit(s: System) {
     setEditId(s.id)
-    setForm({ name: s.name, description: s.description, system_type: s.system_type, infra_type: s.infra_type, infra_region: s.infra_region, owner_type: s.owner_type || 'internal', managed_by: s.managed_by || '', deployment_type: s.deployment_type || '', owner: s.owner || '' })
+    setForm({ name: s.name, description: s.description, vendor: s.vendor || '', system_type: s.system_type, infra_type: s.infra_type, infra_region: s.infra_region, owner_type: s.owner_type || 'internal', managed_by: s.managed_by || '', deployment_type: s.deployment_type || '', owner: s.owner || '', lifecycle_status: s.lifecycle_status || 'active' })
     setError(''); setDlgOpen(true)
   }
   function closeDialog() { setDlgOpen(false); setEditId(null) }
@@ -717,6 +717,19 @@ function SystemEditor() {
           <FormField label="Name *">
             <Input value={form.name} onInput={e => setForm(p => ({ ...p, name: (e.target as unknown as HTMLInputElement).value }))} style={{ width: '100%' }} />
           </FormField>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <FormField label="Lifecycle Status">
+              <select value={form.lifecycle_status} onChange={f('lifecycle_status')} style={{ ...nativeSelect, width: '100%' }}>
+                <option value="active">Active</option>
+                <option value="planned">Planned</option>
+                <option value="retiring">Retiring</option>
+                <option value="decommissioned">Decommissioned</option>
+              </select>
+            </FormField>
+            <FormField label="Vendor">
+              <Input value={form.vendor} placeholder="e.g. SAP, Salesforce" onInput={e => setForm(p => ({ ...p, vendor: (e.target as unknown as HTMLInputElement).value }))} />
+            </FormField>
+          </div>
           <FormField label="Description">
             <Input value={form.description} onInput={e => setForm(p => ({ ...p, description: (e.target as unknown as HTMLInputElement).value }))} style={{ width: '100%' }} />
           </FormField>

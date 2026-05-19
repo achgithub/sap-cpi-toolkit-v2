@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { System } from './types'
 import type { DiagramFilter } from './types'
+import { LIFECYCLE_STATUSES } from './types'
 import type { StatusConfig } from './types_v2'
 
 interface Props {
@@ -120,7 +121,8 @@ interface ArchView { id: string; name: string; owner: string; filter: DiagramFil
 
 export default function ArchitectureFiltersV2({ systems, filter, onChange, statusConfigs, viewMode, onViewModeChange }: Props) {
   const activeCount = (filter.systemIds.length ? 1 : 0) +
-    (filter.infraTypes.length ? 1 : 0) + (filter.statuses.length ? 1 : 0)
+    (filter.infraTypes.length ? 1 : 0) + (filter.statuses.length ? 1 : 0) +
+    (filter.lifecycleStatuses.length ? 1 : 0)
 
   const [views,      setViews]     = useState<ArchView[]>([])
   const [saving,     setSaving]    = useState(false)
@@ -200,9 +202,10 @@ export default function ArchitectureFiltersV2({ systems, filter, onChange, statu
 
       {/* Filters — only in interface mode */}
       {viewMode === 'interface' && (<>
-        <MultiSelect label="System" options={systemOptions} selected={filter.systemIds}  onChange={v => onChange({ ...filter, systemIds: v })}  searchable />
-        <MultiSelect label="Infra"  options={infraOptions}  selected={filter.infraTypes} onChange={v => onChange({ ...filter, infraTypes: v })} />
-        <MultiSelect label="Status" options={statusOptions} selected={filter.statuses}   onChange={v => onChange({ ...filter, statuses: v })}   />
+        <MultiSelect label="System"    options={systemOptions}    selected={filter.systemIds}         onChange={v => onChange({ ...filter, systemIds: v })}          searchable />
+        <MultiSelect label="Infra"     options={infraOptions}     selected={filter.infraTypes}        onChange={v => onChange({ ...filter, infraTypes: v })} />
+        <MultiSelect label="Status"    options={statusOptions}    selected={filter.statuses}          onChange={v => onChange({ ...filter, statuses: v })} />
+        <MultiSelect label="Lifecycle" options={LIFECYCLE_STATUSES.map(l => ({ value: l.value, label: l.label, color: l.color }))} selected={filter.lifecycleStatuses} onChange={v => onChange({ ...filter, lifecycleStatuses: v })} />
       </>)}
 
       {viewMode === 'interface' && <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -211,7 +214,7 @@ export default function ArchitectureFiltersV2({ systems, filter, onChange, statu
             <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)' }}>
               {activeCount} active
             </span>
-            <button onClick={() => onChange({ ...filter, systemIds: [], infraTypes: [], statuses: [], functionalDomain: [] })} style={base}>
+            <button onClick={() => onChange({ ...filter, systemIds: [], infraTypes: [], statuses: [], functionalDomain: [], lifecycleStatuses: [] })} style={base}>
               Clear
             </button>
           </>

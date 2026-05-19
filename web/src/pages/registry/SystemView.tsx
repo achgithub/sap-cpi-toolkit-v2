@@ -138,13 +138,15 @@ export default function SystemView() {
               {/* Metadata */}
               {[
                 ['Type',        selected.system_type],
+                ['Vendor',      selected.vendor],
+                ['Lifecycle',   selected.lifecycle_status || 'active'],
                 ['Infra',       [selected.infra_type, selected.infra_region].filter(Boolean).join(' · ')],
                 ['Owner',       selected.owner_type],
                 ['Managed By',  selected.managed_by],
                 ['Deployment',  selected.deployment_type],
                 ['Biz Owner',   selected.owner],
                 ...(selected.description ? [['Description', selected.description]] : []),
-              ].map(([label, value]) => (
+              ].filter(([, v]) => v).map(([label, value]) => (
                 <div key={label} style={{ display: 'flex', gap: 8, fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem' }}>
                   <span style={{ color: 'var(--sapContent_LabelColor)', minWidth: 80, flexShrink: 0 }}>{label}</span>
                   <span style={{ color: 'var(--sapTextColor)' }}>{value || '—'}</span>

@@ -1,16 +1,18 @@
 export interface System {
-  id:              string
-  name:            string
-  system_type:     string
-  infra_type:      string
-  infra_region:    string
-  description:     string
-  owner_type:      string
-  managed_by:      string
-  deployment_type: string
-  owner:           string
-  pos_x:           number
-  pos_y:           number
+  id:               string
+  name:             string
+  system_type:      string
+  infra_type:       string
+  infra_region:     string
+  description:      string
+  owner_type:       string
+  managed_by:       string
+  deployment_type:  string
+  owner:            string
+  lifecycle_status: string
+  vendor:           string
+  pos_x:            number
+  pos_y:            number
 }
 
 export interface LogicalGroup {
@@ -114,11 +116,24 @@ export interface DiagramFilter {
   infraTypes:        string[]
   statuses:          string[]
   functionalDomain:  string[]
+  lifecycleStatuses: string[]
   deliveryProjectId: string
   strict:            boolean
 }
 
 export const emptyFilter = (): DiagramFilter => ({
   systemIds: [], infraTypes: [], statuses: [],
-  functionalDomain: [], deliveryProjectId: '', strict: true,
+  functionalDomain: [], lifecycleStatuses: [], deliveryProjectId: '', strict: true,
 })
+
+// Lifecycle status constants and visual config
+export const LIFECYCLE_STATUSES = [
+  { value: 'active',          label: 'Active',          color: '#43A047' },
+  { value: 'planned',         label: 'Planned',         color: '#6B7280' },
+  { value: 'retiring',        label: 'Retiring',        color: '#F59E0B' },
+  { value: 'decommissioned',  label: 'Decommissioned',  color: '#9E9E9E' },
+] as const
+
+export function lifecycleColor(status: string): string {
+  return LIFECYCLE_STATUSES.find(l => l.value === status)?.color ?? '#43A047'
+}

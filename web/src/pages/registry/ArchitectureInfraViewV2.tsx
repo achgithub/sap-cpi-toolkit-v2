@@ -177,13 +177,15 @@ export default function ArchitectureInfraViewV2({ systems, config, managedByType
 
                 {/* System boxes */}
                 {group.items.map(({ system: s, x, y }) => {
-                  const sc2 = getSystemColor(s.system_type, config)
+                  const sc2  = getSystemColor(s.system_type, config)
+                  const lc   = s.lifecycle_status || 'active'
+                  const lcColor = lc === 'retiring' ? '#F59E0B' : lc === 'decommissioned' ? '#9E9E9E' : lc === 'planned' ? '#6B7280' : sc2
                   return (
-                    <g key={s.id} transform={`translate(${x},${y})`}>
+                    <g key={s.id} transform={`translate(${x},${y})`} opacity={lc === 'decommissioned' ? 0.45 : 1}>
                       <rect width={SYS_W} height={SYS_H} rx={6}
-                        fill="var(--sapTile_Background)" stroke={sc2} strokeWidth={1.5} />
-                      <rect width={SYS_W} height={5} rx={6} fill={sc2} />
-                      <rect width={SYS_W} height={2.5} y={2.5} fill={sc2} />
+                        fill="var(--sapTile_Background)" stroke={lc !== 'active' ? lcColor : sc2} strokeWidth={lc === 'retiring' ? 2 : 1.5} />
+                      <rect width={SYS_W} height={5} rx={6} fill={lc !== 'active' ? lcColor : sc2} />
+                      <rect width={SYS_W} height={2.5} y={2.5} fill={lc !== 'active' ? lcColor : sc2} />
                       {/* System name */}
                       <text x={SYS_W / 2} y={20}
                         textAnchor="middle" dominantBaseline="middle"
@@ -220,6 +222,15 @@ export default function ArchitectureInfraViewV2({ systems, config, managedByType
                           fontSize={7} fill="var(--sapContent_LabelColor)" fontFamily="var(--sapFontFamily)"
                           style={{ userSelect: 'none' }}>
                           {s.owner}
+                        </text>
+                      )}
+                      {/* Lifecycle badge for non-active */}
+                      {lc !== 'active' && (
+                        <text x={SYS_W - 4} y={10}
+                          textAnchor="end" dominantBaseline="middle"
+                          fontSize={7} fontWeight="bold" fill={lcColor} fontFamily="var(--sapFontFamily)"
+                          style={{ userSelect: 'none' }}>
+                          {lc === 'retiring' ? '⚠' : lc === 'planned' ? '◷' : '✕'}
                         </text>
                       )}
                     </g>
