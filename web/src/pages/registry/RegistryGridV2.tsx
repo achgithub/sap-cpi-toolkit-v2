@@ -111,6 +111,9 @@ function InterfaceDialog({ open, editId, initial, api, onClose }: {
 
   async function save() {
     if (!form.name.trim()) { setError('Name is required'); return }
+    if ((form.trigger_type === 'system_push' || form.trigger_type === 'system_scheduled') && !form.trigger_system_id) {
+      setError('Sender (Trigger System) is required'); return
+    }
     setSaving(true); setError('')
     try {
       const body = toBody(form)
@@ -191,7 +194,7 @@ function InterfaceDialog({ open, editId, initial, api, onClose }: {
         </div>
 
         {needsTriggerSystem && (
-          <F label="Trigger System (pushes data)">
+          <F label="Trigger System (pushes data) *">
             <select value={form.trigger_system_id} onChange={e => set('trigger_system_id')(e.target.value)} style={ns}>
               <option value="">— select system —</option>
               {api.systems.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -606,7 +609,10 @@ function StatusPill({ iface, statuses, onUpdate }: {
 
 // ── Main grid ─────────────────────────────────────────────────────────────────
 
-export default function RegistryGridV2() {
+export default function RegistryGridV2({ initialIfaceId, onBack }: {
+  initialIfaceId?: string
+  onBack?: () => void
+} = {}) {
   const api = useRegistryApiV2()
   const [showArchived,   setShowArchived]   = useState(false)
   useEffect(() => { api.load(showArchived) }, [showArchived]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -615,7 +621,7 @@ export default function RegistryGridV2() {
   const [filterStatus,   setFilterStatus]   = useState('')
   const [filterType,     setFilterType]     = useState('')
   const [filterTrigger,  setFilterTrigger]  = useState('')
-  const [selectedId,     setSelectedId]     = useState<string | null>(null)
+  const [selectedId,     setSelectedId]     = useState<string | null>(initialIfaceId ?? null)
   const [dlgOpen,        setDlgOpen]        = useState(false)
   const [editIface,      setEditIface]      = useState<InterfaceV2 | null>(null)
   const [archiveTarget,  setArchiveTarget]  = useState<InterfaceV2 | null>(null)
@@ -659,6 +665,9 @@ export default function RegistryGridV2() {
 
         {/* Toolbar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--sapList_BorderColor)', background: 'var(--sapGroup_TitleBackground)', flexShrink: 0, flexWrap: 'wrap' }}>
+          {onBack && (
+            <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: '#0070F2', padding: '0 4px', flexShrink: 0 }}>← Back</button>
+          )}
           <Input placeholder="Search…" value={search} showClearIcon style={{ width: 200 }}
             onInput={e => setSearch((e.target as unknown as HTMLInputElement).value)} />
 

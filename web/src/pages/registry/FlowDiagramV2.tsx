@@ -249,9 +249,12 @@ function PanelItem({ label, badge, selected, onClick }: {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function FlowDiagramV2() {
+export default function FlowDiagramV2({ initialIfaceId, onBack }: {
+  initialIfaceId?: string
+  onBack?: () => void
+} = {}) {
   const api = useRegistryApiV2()
-  const [selId,          setSelId]          = useState<string | null>(null)
+  const [selId,          setSelId]          = useState<string | null>(initialIfaceId ?? null)
   const [state,          setState]          = useState<FlowDiagramState | null>(null)
   const [saving,         setSaving]         = useState(false)
   const [loadErr,        setLoadErr]        = useState('')
@@ -259,6 +262,11 @@ export default function FlowDiagramV2() {
   const [search,         setSearch]         = useState('')
 
   useEffect(() => { api.load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-select initialIfaceId once interfaces are loaded
+  useEffect(() => {
+    if (initialIfaceId && api.interfaces.length > 0 && !state) select(initialIfaceId)
+  }, [initialIfaceId, api.interfaces]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = api.interfaces.filter(i =>
     !search || i.name.toLowerCase().includes(search.toLowerCase()) || i.ref.toLowerCase().includes(search.toLowerCase())
@@ -332,9 +340,14 @@ export default function FlowDiagramV2() {
           background: 'var(--sapGroup_TitleBackground)',
         }}>
           {!panelCollapsed && (
-            <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--sapTextColor)' }}>
-              Flow Diagrams V2
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {onBack && (
+                <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--sapFontFamily)', fontSize: '0.75rem', color: '#0070F2', padding: '0 2px' }}>← Back</button>
+              )}
+              <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--sapTextColor)' }}>
+                Flow Diagrams V2
+              </span>
+            </div>
           )}
           <button onClick={() => setPanelCollapsed(c => !c)} style={{
             width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
