@@ -36,19 +36,20 @@ func scanSystem(row interface{ Scan(...any) error }) (System, error) {
 }
 
 type systemBody struct {
-	Name            string  `json:"name"`
-	SystemType      string  `json:"system_type"`
-	InfraType       string  `json:"infra_type"`
-	InfraRegion     string  `json:"infra_region"`
-	Description     string  `json:"description"`
-	OwnerType       string  `json:"owner_type"`
-	ManagedBy       string  `json:"managed_by"`
-	DeploymentType  string  `json:"deployment_type"`
-	Owner           string  `json:"owner"`
-	LifecycleStatus string  `json:"lifecycle_status"`
-	Vendor          string  `json:"vendor"`
-	PosX            float64 `json:"pos_x"`
-	PosY            float64 `json:"pos_y"`
+	Name            string `json:"name"`
+	SystemType      string `json:"system_type"`
+	InfraType       string `json:"infra_type"`
+	InfraRegion     string `json:"infra_region"`
+	Description     string `json:"description"`
+	OwnerType       string `json:"owner_type"`
+	ManagedBy       string `json:"managed_by"`
+	DeploymentType  string `json:"deployment_type"`
+	Owner           string `json:"owner"`
+	LifecycleStatus string `json:"lifecycle_status"`
+	Vendor          string `json:"vendor"`
+	// pos_x / pos_y are intentionally excluded — position is managed
+	// exclusively via PATCH /systems/{id}/pos to prevent edit forms
+	// from accidentally zeroing saved canvas positions.
 }
 
 func (h *Handler) listSystems(w http.ResponseWriter, r *http.Request) {
@@ -96,13 +97,12 @@ func (h *Handler) createSystem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s, err := scanSystem(h.pool.QueryRow(r.Context(),
-		`INSERT INTO systems (name, system_type, infra_type, infra_region, description, owner_type, managed_by, deployment_type, owner, lifecycle_status, vendor, pos_x, pos_y)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+		`INSERT INTO systems (name, system_type, infra_type, infra_region, description, owner_type, managed_by, deployment_type, owner, lifecycle_status, vendor)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		 RETURNING `+systemCols,
 		body.Name, body.SystemType, body.InfraType, body.InfraRegion,
 		body.Description, body.OwnerType, body.ManagedBy, body.DeploymentType, body.Owner,
 		body.LifecycleStatus, body.Vendor,
-		body.PosX, body.PosY,
 	))
 	if err != nil {
 		h.log.Error("create system", "error", err)
@@ -124,14 +124,12 @@ func (h *Handler) updateSystem(w http.ResponseWriter, r *http.Request) {
 		`UPDATE systems SET
 		 name=$1, system_type=$2, infra_type=$3, infra_region=$4,
 		 description=$5, owner_type=$6, managed_by=$7, deployment_type=$8, owner=$9,
-		 lifecycle_status=$10, vendor=$11,
-		 pos_x=$12, pos_y=$13, updated_at=now()
-		 WHERE id=$14
+		 lifecycle_status=$10, vendor=$11, updated_at=now()
+		 WHERE id=$12
 		 RETURNING `+systemCols,
 		body.Name, body.SystemType, body.InfraType, body.InfraRegion,
 		body.Description, body.OwnerType, body.ManagedBy, body.DeploymentType, body.Owner,
-		body.LifecycleStatus, body.Vendor,
-		body.PosX, body.PosY, id,
+		body.LifecycleStatus, body.Vendor, id,
 	))
 	if err != nil {
 		if isNotFound(err) {
