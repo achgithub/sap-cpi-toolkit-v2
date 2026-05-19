@@ -22,6 +22,7 @@ import CloudConnector from './tools/CloudConnector'
 import EDITools from './tools/EDITools'
 import MockServer from './tools/MockServer'
 import SFTPServer from './tools/SFTPServer'
+import Comparator from './tools/Comparator'
 // Logo served as a static asset from public/ — no import needed, no TypeScript SVG module required.
 const SAP_LOGO_URL = '/sap-logo.svg'
 
@@ -208,6 +209,7 @@ export default function App() {
       <ToolDialog {...tdProps} id="adapter-templates"  title="Adapter Templates — Global Library" defaultWidth="90vw" defaultHeight="90vh"><GlobalAdapterTemplates /></ToolDialog>
       <ToolDialog {...tdProps} id="registry-settings"  title="Registry Settings"                defaultWidth="600px" defaultHeight="80vh"><RegistrySettings /></ToolDialog>
       <ToolDialog {...tdProps} id="mock-server"        title="HTTP Mock Server"                 defaultWidth="90vw"  defaultHeight="90vh"><MockServer /></ToolDialog>
+      <ToolDialog {...tdProps} id="comparator"        title="Comparator"                       defaultWidth="96vw"  defaultHeight="94vh"><Comparator /></ToolDialog>
 
     </FlexBox>
     </WorkspaceProvider>

@@ -1,7 +1,7 @@
 import { Button, Icon } from '@ui5/webcomponents-react'
 import { useClipboard, type ClipboardEntry } from '../context/WorkspaceContext'
 
-export type ToolID = 'formatter' | 'groovy' | 'sftp' | 'http-client' | 'mock-server' | 'edi' | 'security' | 'assets' | 'cloud-connector' | 'adapter-templates' | 'registry-settings'
+export type ToolID = 'formatter' | 'groovy' | 'sftp' | 'http-client' | 'mock-server' | 'edi' | 'security' | 'assets' | 'cloud-connector' | 'adapter-templates' | 'registry-settings' | 'comparator'
 
 interface Tool {
   id: ToolID
@@ -14,6 +14,7 @@ interface Tool {
 
 const TOOLS: Tool[] = [
   { id: 'assets',             icon: 'folder',           name: 'Asset Library',         description: 'Browse & manage saved assets',  image: 'api',           available: true  },
+  { id: 'comparator',        icon: 'compare',          name: 'Comparator',            description: 'Diff two files side by side',   image: 'api',           available: true  },
   { id: 'adapter-templates', icon: 'wrench',           name: 'Adapter Templates',     description: 'Global iFlow BPMN fragment library', image: 'api',        available: true  },
   { id: 'formatter',    icon: 'syntax',           name: 'Formatter',             description: 'XML & JSON formatting',         image: 'api',           available: true  },
   { id: 'groovy',       icon: 'source-code',      name: 'Groovy IDE + Runner',   description: 'Script editor & execution',     image: 'groovy-runner', available: true  },
