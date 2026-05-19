@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRegistryApiV2 } from './useRegistryApiV2'
 import type { DiagramFilter } from './types'
-import type { System, DiagramEdge, RegistryConfig } from './types'
+import type { System, DiagramEdge, RegistryConfig, Point } from './types'
 import ArchitectureFiltersV2   from './ArchitectureFiltersV2'
 import ArchitectureCanvasV2    from './ArchitectureCanvasV2'
 import ArchitectureInfraViewV2 from './ArchitectureInfraViewV2'
@@ -14,9 +14,13 @@ interface Props {
 
 export default function ArchitectureViewV2({ filter, onFilterChange, onOpenRegistry }: Props) {
   const api = useRegistryApiV2()
-  const [diagramSystems, setDiagramSystems] = useState<System[]>([])
-  const [diagramEdges,   setDiagramEdges]   = useState<DiagramEdge[]>([])
-  const [viewMode,       setViewMode]       = useState<'interface' | 'infra'>('interface')
+  const [diagramSystems,    setDiagramSystems]    = useState<System[]>([])
+  const [diagramEdges,      setDiagramEdges]      = useState<DiagramEdge[]>([])
+  const [viewMode,          setViewMode]          = useState<'interface' | 'infra'>('interface')
+  const [overridePositions, setOverridePositions] = useState<Record<string, Point> | null>(null)
+
+  // Ref the canvas exposes so ArchitectureFiltersV2 can read positions when saving a view
+  const posRef = useRef<Record<string, Point>>({})
 
   useEffect(() => { api.load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -42,6 +46,11 @@ export default function ArchitectureViewV2({ filter, onFilterChange, onOpenRegis
         statusConfigs={api.config.statuses}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
+        posRef={posRef}
+        onLoadView={(f, positions) => {
+          onFilterChange(f)
+          if (Object.keys(positions).length > 0) setOverridePositions(positions)
+        }}
       />
 
       {api.loading && (
@@ -69,6 +78,8 @@ export default function ArchitectureViewV2({ filter, onFilterChange, onOpenRegis
               statusConfigs={api.config.statuses}
               onNodeMoved={api.updateSystemPos}
               onOpenRegistry={onOpenRegistry}
+              posRef={posRef}
+              overridePositions={overridePositions}
             />
             )
           })() : (

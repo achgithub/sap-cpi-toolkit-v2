@@ -1,17 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ELK from 'elkjs/lib/elk.bundled.js'
 import type { ElkNode } from 'elkjs'
-import type { System, DiagramEdge, RegistryConfig } from './types'
+import type { System, DiagramEdge, RegistryConfig, Point } from './types'
 import { getSystemColor } from './types'
 import type { StatusConfig } from './types_v2'
 
 interface Props {
-  systems:        System[]
-  edges:          DiagramEdge[]
-  config:         RegistryConfig
-  statusConfigs:  StatusConfig[]
-  onNodeMoved:    (id: string, x: number, y: number) => void
-  onOpenRegistry: (senderSystemId: string, receiverSystemId: string) => void
+  systems:           System[]
+  edges:             DiagramEdge[]
+  config:            RegistryConfig
+  statusConfigs:     StatusConfig[]
+  onNodeMoved:       (id: string, x: number, y: number) => void
+  onOpenRegistry:    (senderSystemId: string, receiverSystemId: string) => void
+  posRef?:           React.MutableRefObject<Record<string, Point>>
+  overridePositions?: Record<string, Point> | null
 }
 
 const NODE_W  = 160
@@ -29,7 +31,6 @@ const LAYOUT_OPTIONS = [
 ] as const
 
 type LayoutAlgo = typeof LAYOUT_OPTIONS[number]['id']
-type Point      = { x: number; y: number }
 
 const elk = new ELK()
 
@@ -153,7 +154,7 @@ const toolBtn: React.CSSProperties = {
   color: 'var(--sapTextColor)', cursor: 'pointer',
 }
 
-export default function ArchitectureCanvasV2({ systems, edges, config, statusConfigs, onNodeMoved, onOpenRegistry }: Props) {
+export default function ArchitectureCanvasV2({ systems, edges, config, statusConfigs, onNodeMoved, onOpenRegistry, posRef, overridePositions }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const [pan,        setPan]        = useState({ x: 40, y: 40 })
   const [scale,      setScale]      = useState(1)
@@ -177,6 +178,20 @@ export default function ArchitectureCanvasV2({ systems, edges, config, statusCon
   const layoutGen     = useRef(0)
   const prevLayoutKey = useRef('')
   const prevAlgo      = useRef<LayoutAlgo>('stress')
+  const overrideRef   = useRef<Record<string, Point> | null>(null)
+
+  // Keep posRef in sync so parent can read current positions when saving a view
+  useEffect(() => { if (posRef) posRef.current = pos }, [pos, posRef])
+
+  // When a view is loaded with saved positions, apply them immediately and
+  // cancel any in-flight ELK so it doesn't overwrite them
+  useEffect(() => {
+    if (overridePositions && Object.keys(overridePositions).length > 0) {
+      overrideRef.current = overridePositions
+      layoutGen.current++
+      setPos(overridePositions)
+    }
+  }, [overridePositions]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const isNewData   = prevLayoutKey.current !== layoutKey
@@ -188,12 +203,15 @@ export default function ArchitectureCanvasV2({ systems, edges, config, statusCon
 
     elkLayout(systems, pairs, layoutAlgo).then(layout => {
       if (gen !== layoutGen.current) return
+      const override = overrideRef.current
+      overrideRef.current = null
       setPos(() => {
         const next: Record<string, Point> = {}
         systems.forEach(s => {
-          next[s.id] = (!algoChanged && (s.pos_x !== 0 || s.pos_y !== 0))
-            ? { x: s.pos_x, y: s.pos_y }
-            : (layout[s.id] ?? { x: 60, y: 60 })
+          next[s.id] = override?.[s.id]
+            ?? ((!algoChanged && (s.pos_x !== 0 || s.pos_y !== 0))
+              ? { x: s.pos_x, y: s.pos_y }
+              : (layout[s.id] ?? { x: 60, y: 60 }))
         })
         return next
       })

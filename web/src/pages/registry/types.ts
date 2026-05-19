@@ -1,3 +1,5 @@
+export type Point = { x: number; y: number }
+
 export interface System {
   id:               string
   name:             string

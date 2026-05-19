@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import type { System } from './types'
+import type { System, Point } from './types'
 import type { DiagramFilter } from './types'
 import { LIFECYCLE_STATUSES, emptyFilter } from './types'
 import type { StatusConfig } from './types_v2'
@@ -11,6 +11,8 @@ interface Props {
   statusConfigs:    StatusConfig[]
   viewMode:         'interface' | 'infra'
   onViewModeChange: (m: 'interface' | 'infra') => void
+  posRef:           React.MutableRefObject<Record<string, Point>>
+  onLoadView:       (filter: DiagramFilter, positions: Record<string, Point>) => void
 }
 
 function MultiSelect({
@@ -117,9 +119,14 @@ function MultiSelect({
 
 const BASE_V2 = '/api/interfaces/v2'
 
-interface ArchView { id: string; name: string; owner: string; filter: DiagramFilter; is_default: boolean }
+interface ArchView {
+  id: string; name: string; owner: string
+  filter: DiagramFilter
+  positions: Record<string, Point>
+  is_default: boolean
+}
 
-export default function ArchitectureFiltersV2({ systems, filter, onChange, statusConfigs, viewMode, onViewModeChange }: Props) {
+export default function ArchitectureFiltersV2({ systems, filter, onChange, statusConfigs, viewMode, onViewModeChange, posRef, onLoadView }: Props) {
   const lsFilter    = filter.lifecycleStatuses ?? []
   const activeCount = (filter.systemIds.length ? 1 : 0) +
     (filter.infraTypes.length ? 1 : 0) + (filter.statuses.length ? 1 : 0) +
@@ -140,7 +147,7 @@ export default function ArchitectureFiltersV2({ systems, filter, onChange, statu
         if (!defaultApplied.current) {
           defaultApplied.current = true
           const def = data.find(v => v.is_default)
-          if (def) onChange({ ...emptyFilter(), ...def.filter })
+          if (def) onLoadView({ ...emptyFilter(), ...def.filter }, def.positions ?? {})
         }
       })
       .catch(() => {})
@@ -163,7 +170,7 @@ export default function ArchitectureFiltersV2({ systems, filter, onChange, statu
     if (!name) return
     const res = await fetch(`${BASE_V2}/architecture-views`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, owner: viewOwner.trim(), filter }),
+      body: JSON.stringify({ name, owner: viewOwner.trim(), filter, positions: posRef.current }),
     })
     if (res.ok) {
       const saved: ArchView = await res.json()
@@ -292,7 +299,7 @@ export default function ArchitectureFiltersV2({ systems, filter, onChange, statu
                   }}>
                     {/* Load */}
                     <button
-                      onClick={() => { onChange({ ...emptyFilter(), ...v.filter }); setViewsOpen(false) }}
+                      onClick={() => { onLoadView({ ...emptyFilter(), ...v.filter }, v.positions ?? {}); setViewsOpen(false) }}
                       style={{
                         flex: 1, textAlign: 'left', border: 'none', background: 'transparent',
                         cursor: 'pointer', fontFamily: 'var(--sapFontFamily)', fontSize: '0.78rem',
