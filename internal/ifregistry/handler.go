@@ -110,9 +110,11 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v2/interfaces/{id}/flow-diagram", h.putInterfaceV2FlowDiagram)
 
 	// Architecture saved views
-	mux.HandleFunc("GET /v2/architecture-views",        h.listArchViews)
-	mux.HandleFunc("POST /v2/architecture-views",       h.createArchView)
-	mux.HandleFunc("DELETE /v2/architecture-views/{id}", h.deleteArchView)
+	mux.HandleFunc("GET /v2/architecture-views",                    h.listArchViews)
+	mux.HandleFunc("POST /v2/architecture-views",                   h.createArchView)
+	mux.HandleFunc("DELETE /v2/architecture-views/{id}",            h.deleteArchView)
+	mux.HandleFunc("POST /v2/architecture-views/{id}/set-default",  h.setDefaultArchView)
+	mux.HandleFunc("POST /v2/architecture-views/clear-default",     h.clearDefaultArchView)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

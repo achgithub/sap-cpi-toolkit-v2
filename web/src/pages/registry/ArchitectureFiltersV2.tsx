@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import type { System } from './types'
 import type { DiagramFilter } from './types'
 import { LIFECYCLE_STATUSES, emptyFilter } from './types'
@@ -117,7 +117,7 @@ function MultiSelect({
 
 const BASE_V2 = '/api/interfaces/v2'
 
-interface ArchView { id: string; name: string; owner: string; filter: DiagramFilter }
+interface ArchView { id: string; name: string; owner: string; filter: DiagramFilter; is_default: boolean }
 
 export default function ArchitectureFiltersV2({ systems, filter, onChange, statusConfigs, viewMode, onViewModeChange }: Props) {
   const lsFilter    = filter.lifecycleStatuses ?? []
@@ -125,17 +125,35 @@ export default function ArchitectureFiltersV2({ systems, filter, onChange, statu
     (filter.infraTypes.length ? 1 : 0) + (filter.statuses.length ? 1 : 0) +
     (lsFilter.length ? 1 : 0)
 
-  const [views,      setViews]     = useState<ArchView[]>([])
-  const [saving,     setSaving]    = useState(false)
-  const [viewName,   setViewName]  = useState('')
-  const [viewOwner,  setViewOwner] = useState('')
-  const nameInputRef = useRef<HTMLInputElement>(null)
+  const [views,         setViews]        = useState<ArchView[]>([])
+  const [saving,        setSaving]       = useState(false)
+  const [viewName,      setViewName]     = useState('')
+  const [viewOwner,     setViewOwner]    = useState('')
+  const nameInputRef    = useRef<HTMLInputElement>(null)
+  const defaultApplied  = useRef(false)
 
   useEffect(() => {
     fetch(`${BASE_V2}/architecture-views`)
       .then(r => r.json())
-      .then((data: ArchView[]) => setViews(data))
+      .then((data: ArchView[]) => {
+        setViews(data)
+        if (!defaultApplied.current) {
+          defaultApplied.current = true
+          const def = data.find(v => v.is_default)
+          if (def) onChange({ ...emptyFilter(), ...def.filter })
+        }
+      })
       .catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleDefault = useCallback(async (view: ArchView) => {
+    if (view.is_default) {
+      await fetch(`${BASE_V2}/architecture-views/clear-default`, { method: 'POST' })
+      setViews(prev => prev.map(v => ({ ...v, is_default: false })))
+    } else {
+      await fetch(`${BASE_V2}/architecture-views/${view.id}/set-default`, { method: 'POST' })
+      setViews(prev => prev.map(v => ({ ...v, is_default: v.id === view.id })))
+    }
   }, [])
 
   useEffect(() => { if (saving) nameInputRef.current?.focus() }, [saving])
@@ -163,7 +181,17 @@ export default function ArchitectureFiltersV2({ systems, filter, onChange, statu
     setViews(prev => prev.filter(v => v.id !== id))
   }
 
-  const viewNames    = views
+  const [viewsOpen, setViewsOpen] = useState(false)
+  const viewsRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!viewsOpen) return
+    function onDoc(e: MouseEvent) {
+      if (viewsRef.current && !viewsRef.current.contains(e.target as Node)) setViewsOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [viewsOpen])
+
   const systemOptions = systems.map(s => ({ value: s.id, label: s.name }))
   const statusOptions = statusConfigs.map(s => ({
     value: s.name,
@@ -236,23 +264,75 @@ export default function ArchitectureFiltersV2({ systems, filter, onChange, statu
           Strict
         </button>
 
-        {/* ── Saved views ─────────────────────────────────────────────── */}
-        {viewNames.length > 0 && !saving && (
-          <select
-            defaultValue=""
-            onChange={e => {
-              const v = views.find(x => x.id === e.target.value)
-              if (v) onChange({ ...emptyFilter(), ...v.filter })
-              e.target.value = ''
-            }}
-            style={{ ...base, cursor: 'pointer', maxWidth: 160 }}
-            title="Load a saved view"
-          >
-            <option value="" disabled>Saved views…</option>
-            {viewNames.map(v => (
-              <option key={v.id} value={v.id}>{v.name}{v.owner ? ` — ${v.owner}` : ''}</option>
-            ))}
-          </select>
+        {/* ── Saved views dropdown ────────────────────────────────────── */}
+        {views.length > 0 && !saving && (
+          <div ref={viewsRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setViewsOpen(o => !o)}
+              style={{
+                ...base, cursor: 'pointer',
+                border: `1px solid ${views.some(v => v.is_default) ? 'var(--sapHighlightColor)' : 'var(--sapList_BorderColor)'}`,
+                display: 'flex', alignItems: 'center', gap: '4px',
+              }}
+            >
+              {views.some(v => v.is_default) ? '★ ' : ''}Views ({views.length}) <span style={{ fontSize: '0.6rem' }}>▾</span>
+            </button>
+            {viewsOpen && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 300,
+                background: 'var(--sapTile_Background)',
+                border: '1px solid var(--sapList_BorderColor)',
+                borderRadius: '6px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                minWidth: '220px', overflow: 'hidden',
+              }}>
+                {views.map(v => (
+                  <div key={v.id} style={{
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                    padding: '5px 8px', borderBottom: '1px solid var(--sapList_BorderColor)',
+                  }}>
+                    {/* Load */}
+                    <button
+                      onClick={() => { onChange({ ...emptyFilter(), ...v.filter }); setViewsOpen(false) }}
+                      style={{
+                        flex: 1, textAlign: 'left', border: 'none', background: 'transparent',
+                        cursor: 'pointer', fontFamily: 'var(--sapFontFamily)', fontSize: '0.78rem',
+                        color: 'var(--sapTextColor)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        padding: '2px 4px',
+                      }}
+                      title={v.owner ? `Owner: ${v.owner}` : undefined}
+                    >
+                      {v.name}{v.owner ? <span style={{ color: 'var(--sapContent_LabelColor)', fontSize: '0.72rem' }}> — {v.owner}</span> : null}
+                    </button>
+                    {/* Default star */}
+                    <button
+                      onClick={() => toggleDefault(v)}
+                      title={v.is_default ? 'Remove as default' : 'Set as default (auto-loads when Architecture opens)'}
+                      style={{
+                        border: 'none', background: 'transparent', cursor: 'pointer',
+                        fontSize: '0.9rem', padding: '2px 4px', flexShrink: 0,
+                        color: v.is_default ? '#F59E0B' : 'var(--sapContent_LabelColor)',
+                        lineHeight: 1,
+                      }}
+                    >
+                      {v.is_default ? '★' : '☆'}
+                    </button>
+                    {/* Delete */}
+                    <button
+                      onClick={() => deleteView(v.id, v.name)}
+                      title="Delete view"
+                      style={{
+                        border: 'none', background: 'transparent', cursor: 'pointer',
+                        fontSize: '0.78rem', padding: '2px 4px', flexShrink: 0,
+                        color: 'var(--sapNegativeColor)', lineHeight: 1,
+                      }}
+                    >
+                      🗑
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {saving ? (
@@ -299,24 +379,6 @@ export default function ArchitectureFiltersV2({ systems, filter, onChange, statu
           </button>
         )}
 
-        {/* Delete a saved view */}
-        {viewNames.length > 0 && !saving && (
-          <select
-            defaultValue=""
-            onChange={e => {
-              const v = views.find(x => x.id === e.target.value)
-              if (v) deleteView(v.id, v.name)
-              e.target.value = ''
-            }}
-            style={{ ...base, cursor: 'pointer', color: 'var(--sapNegativeColor)', maxWidth: 40 }}
-            title="Delete a saved view"
-          >
-            <option value="" disabled>🗑</option>
-            {viewNames.map(v => (
-              <option key={v.id} value={v.id}>{v.name}</option>
-            ))}
-          </select>
-        )}
       </div>}
     </div>
   )
