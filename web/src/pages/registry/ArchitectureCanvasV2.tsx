@@ -28,9 +28,8 @@ const LAYOUT_OPTIONS = [
   { id: 'disco',      label: 'Disco'        },
 ] as const
 
-type LayoutAlgo   = typeof LAYOUT_OPTIONS[number]['id']
-type Point        = { x: number; y: number }
-type EdgeSections = Record<string, Point[]>
+type LayoutAlgo = typeof LAYOUT_OPTIONS[number]['id']
+type Point      = { x: number; y: number }
 
 const elk = new ELK()
 
@@ -64,8 +63,8 @@ async function elkLayout(
   systems: System[],
   pairs: [string, string][],
   algo: LayoutAlgo,
-): Promise<{ pos: Record<string, Point>; sections: EdgeSections }> {
-  if (systems.length === 0) return { pos: {}, sections: {} }
+): Promise<Record<string, Point>> {
+  if (systems.length === 0) return {}
   const graph: ElkNode = {
     id: 'root',
     layoutOptions: elkOptions(algo),
@@ -75,13 +74,7 @@ async function elkLayout(
   const result = await elk.layout(graph)
   const pos: Record<string, Point> = {}
   result.children?.forEach(n => { if (n.x != null && n.y != null) pos[n.id] = { x: n.x, y: n.y } })
-  const sections: EdgeSections = {}
-  result.edges?.forEach(e => {
-    const sec = (e as any).sections?.[0]
-    if (!sec) return
-    sections[e.id!] = [sec.startPoint, ...(sec.bendPoints ?? []), sec.endPoint]
-  })
-  return { pos, sections }
+  return pos
 }
 
 function snap(v: number) { return Math.round(v / SNAP) * SNAP }
@@ -162,14 +155,12 @@ const toolBtn: React.CSSProperties = {
 
 export default function ArchitectureCanvasV2({ systems, edges, config, statusConfigs, onNodeMoved, onOpenRegistry }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null)
-  const [pan,          setPan]          = useState({ x: 40, y: 40 })
-  const [scale,        setScale]        = useState(1)
-  const [pos,          setPos]          = useState<Record<string, Point>>({})
-  const [edgeSections, setEdgeSections] = useState<EdgeSections>({})
-  const [sectionsValid, setSectionsValid] = useState(false)
-  const [layoutAlgo,   setLayoutAlgo]   = useState<LayoutAlgo>('stress')
-  const [edgeColors,   setEdgeColors]   = useState<Record<string, string>>(() => loadColors())
-  const [popup,        setPopup]        = useState<Popup | null>(null)
+  const [pan,        setPan]        = useState({ x: 40, y: 40 })
+  const [scale,      setScale]      = useState(1)
+  const [pos,        setPos]        = useState<Record<string, Point>>({})
+  const [layoutAlgo, setLayoutAlgo] = useState<LayoutAlgo>('stress')
+  const [edgeColors, setEdgeColors] = useState<Record<string, string>>(() => loadColors())
+  const [popup,      setPopup]      = useState<Popup | null>(null)
   const [colorPickKey, setColorPickKey] = useState<string | null>(null)
 
   const drag   = useRef<{ id: string; ox: number; oy: number; mx: number; my: number } | null>(null)
@@ -192,39 +183,22 @@ export default function ArchitectureCanvasV2({ systems, edges, config, statusCon
     const algoChanged = prevAlgo.current !== layoutAlgo
     prevLayoutKey.current = layoutKey
     prevAlgo.current      = layoutAlgo
+    if (!isNewData && !algoChanged) return
     const gen = ++layoutGen.current
 
-    elkLayout(systems, pairs, layoutAlgo).then(({ pos: layout, sections }) => {
+    elkLayout(systems, pairs, layoutAlgo).then(layout => {
       if (gen !== layoutGen.current) return
-      setEdgeSections(sections)
-
-      if (isNewData) {
-        // System set changed — restore saved positions from DB, fall back to ELK
-        setSectionsValid(false)
-        setPos(() => {
-          const next: Record<string, Point> = {}
-          systems.forEach(s => {
-            next[s.id] = (s.pos_x !== 0 || s.pos_y !== 0)
-              ? { x: s.pos_x, y: s.pos_y }
-              : (layout[s.id] ?? { x: 60, y: 60 })
-          })
-          return next
+      setPos(() => {
+        const next: Record<string, Point> = {}
+        systems.forEach(s => {
+          next[s.id] = (!algoChanged && (s.pos_x !== 0 || s.pos_y !== 0))
+            ? { x: s.pos_x, y: s.pos_y }
+            : (layout[s.id] ?? { x: 60, y: 60 })
         })
-      } else if (algoChanged) {
-        // User explicitly switched layout algorithm — apply ELK everywhere
-        setSectionsValid(Object.keys(sections).length > 0)
-        setPos(() => {
-          const next: Record<string, Point> = {}
-          systems.forEach(s => { next[s.id] = layout[s.id] ?? { x: 60, y: 60 } })
-          return next
-        })
-      } else {
-        // Only edges changed (filter update with same systems) — refresh routing
-        // but leave node positions exactly where the user placed them
-        setSectionsValid(Object.keys(sections).length > 0)
-      }
+        return next
+      })
     })
-  }, [layoutKey, pairs, layoutAlgo]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [layoutKey, layoutAlgo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fitView = useCallback(() => {
     const el = containerRef.current
@@ -254,7 +228,6 @@ export default function ArchitectureCanvasV2({ systems, edges, config, statusCon
     if (drag.current) {
       const { id, ox, oy } = drag.current
       setPos(prev => ({ ...prev, [id]: { x: (e.clientX - pan.x) / scale - ox, y: (e.clientY - pan.y) / scale - oy } }))
-      setSectionsValid(false)
     } else if (panRef.current) {
       setPan({ x: panRef.current.px + e.clientX - panRef.current.mx, y: panRef.current.py + e.clientY - panRef.current.my })
     }
@@ -310,11 +283,9 @@ export default function ArchitectureCanvasV2({ systems, edges, config, statusCon
   const statusColor = (name: string) => statusConfigs.find(s => s.name === name)?.color ?? '#888'
 
   function getEdgePts(edge: DiagramEdge): Point[] {
-    const key = edgeKey(edge)
-    const pa  = pos[edge.sender_system_id]
-    const pb  = pos[edge.receiver_system_id]
+    const pa = pos[edge.sender_system_id]
+    const pb = pos[edge.receiver_system_id]
     if (!pa || !pb) return []
-    if (sectionsValid && edgeSections[key]) return edgeSections[key]
     return elbowRoute(pa, pb)
   }
 
