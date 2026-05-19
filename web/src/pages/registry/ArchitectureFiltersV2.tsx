@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { System } from './types'
 import type { DiagramFilter } from './types'
-import { LIFECYCLE_STATUSES } from './types'
+import { LIFECYCLE_STATUSES, emptyFilter } from './types'
 import type { StatusConfig } from './types_v2'
 
 interface Props {
@@ -120,9 +120,10 @@ const BASE_V2 = '/api/interfaces/v2'
 interface ArchView { id: string; name: string; owner: string; filter: DiagramFilter }
 
 export default function ArchitectureFiltersV2({ systems, filter, onChange, statusConfigs, viewMode, onViewModeChange }: Props) {
+  const lsFilter    = filter.lifecycleStatuses ?? []
   const activeCount = (filter.systemIds.length ? 1 : 0) +
     (filter.infraTypes.length ? 1 : 0) + (filter.statuses.length ? 1 : 0) +
-    (filter.lifecycleStatuses.length ? 1 : 0)
+    (lsFilter.length ? 1 : 0)
 
   const [views,      setViews]     = useState<ArchView[]>([])
   const [saving,     setSaving]    = useState(false)
@@ -205,7 +206,7 @@ export default function ArchitectureFiltersV2({ systems, filter, onChange, statu
         <MultiSelect label="System"    options={systemOptions}    selected={filter.systemIds}         onChange={v => onChange({ ...filter, systemIds: v })}          searchable />
         <MultiSelect label="Infra"     options={infraOptions}     selected={filter.infraTypes}        onChange={v => onChange({ ...filter, infraTypes: v })} />
         <MultiSelect label="Status"    options={statusOptions}    selected={filter.statuses}          onChange={v => onChange({ ...filter, statuses: v })} />
-        <MultiSelect label="Lifecycle" options={LIFECYCLE_STATUSES.map(l => ({ value: l.value, label: l.label, color: l.color }))} selected={filter.lifecycleStatuses} onChange={v => onChange({ ...filter, lifecycleStatuses: v })} />
+        <MultiSelect label="Lifecycle" options={LIFECYCLE_STATUSES.map(l => ({ value: l.value, label: l.label, color: l.color }))} selected={lsFilter} onChange={v => onChange({ ...filter, lifecycleStatuses: v })} />
       </>)}
 
       {viewMode === 'interface' && <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -241,7 +242,7 @@ export default function ArchitectureFiltersV2({ systems, filter, onChange, statu
             defaultValue=""
             onChange={e => {
               const v = views.find(x => x.id === e.target.value)
-              if (v) onChange(v.filter)
+              if (v) onChange({ ...emptyFilter(), ...v.filter })
               e.target.value = ''
             }}
             style={{ ...base, cursor: 'pointer', maxWidth: 160 }}

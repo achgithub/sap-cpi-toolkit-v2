@@ -53,11 +53,12 @@ export default function ArchitectureViewV2({ filter, onFilterChange, onOpenRegis
       {!api.loading && (
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
           {viewMode === 'interface' ? (() => {
-            const lifecycleFiltered = filter.lifecycleStatuses.length > 0
-              ? diagramSystems.filter(s => filter.lifecycleStatuses.includes(s.lifecycle_status || 'active'))
+            const lsFilter = filter.lifecycleStatuses ?? []
+            const lifecycleFiltered = lsFilter.length > 0
+              ? diagramSystems.filter(s => lsFilter.includes(s.lifecycle_status || 'active'))
               : diagramSystems
             const survivingIds = new Set(lifecycleFiltered.map(s => s.id))
-            const lifecycleEdges = filter.lifecycleStatuses.length > 0
+            const lifecycleEdges = lsFilter.length > 0
               ? diagramEdges.filter(e => survivingIds.has(e.sender_system_id) && survivingIds.has(e.receiver_system_id))
               : diagramEdges
             return (
