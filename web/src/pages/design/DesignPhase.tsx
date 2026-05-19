@@ -8,7 +8,8 @@ import PhaseLayout from '../../components/PhaseLayout'
 import { useWorkspace, type Project } from '../../context/WorkspaceContext'
 import ProjectSetup from './ProjectSetup'
 import ProjectAdapterTemplates from '../../tools/ProjectAdapterTemplates'
-import ArchitectureView from '../registry/ArchitectureView'
+import ArchitectureView   from '../registry/ArchitectureView'
+import ArchitectureViewV2 from '../registry/ArchitectureViewV2'
 import RegistryGrid from '../registry/RegistryGrid'
 import RegistryGridV2 from '../registry/RegistryGridV2'
 import FlowDiagramV2  from '../registry/FlowDiagramV2'
@@ -178,8 +179,9 @@ const DESIGN_NAV = [
   { id: 'group',         label: 'Group Diagram', icon: 'group'                       },
   { id: 'registry',      label: 'Registry',      icon: 'detail-view'                 },
   { id: 'systems',       label: 'Systems',       icon: 'it-system'                   },
-  { id: 'registry-v2',   label: 'Registry V2 ⚒', icon: 'lab'                        },
-  { id: 'flow-v2',       label: 'Flow V2 ⚒',     icon: 'process'                    },
+  { id: 'registry-v2',      label: 'Registry V2 ⚒',      icon: 'lab'       },
+  { id: 'flow-v2',          label: 'Flow V2 ⚒',          icon: 'process'   },
+  { id: 'architecture-v2',  label: 'Architecture V2 ⚒',  icon: 'org-chart' },
 ]
 
 function PhasePlaceholder({ title, description }: { title: string; description: string }) {
@@ -248,6 +250,17 @@ export default function DesignPhase() {
                 setRegistryFilter({ sender, receiver })
                 setFromArch(true)
                 setId('registry')
+              }}
+            />
+          )}
+          {id === 'architecture-v2' && (
+            <ArchitectureViewV2
+              filter={archFilter}
+              onFilterChange={setArchFilter}
+              onOpenRegistry={(sender, receiver) => {
+                setRegistryFilter({ sender, receiver })
+                setFromArch(true)
+                setId('registry-v2')
               }}
             />
           )}

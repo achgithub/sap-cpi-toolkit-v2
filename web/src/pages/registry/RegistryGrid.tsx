@@ -375,23 +375,23 @@ function InterfaceForm({
         </div>
       </div>
 
-      {/* Delete confirmation — UI5 Dialog portals to document.body, so parent overflow:hidden won't clip it */}
+      {/* Archive confirmation */}
       <Dialog
         open={confirmDelete}
-        headerText="Delete Interface"
+        headerText="Archive Interface"
         onClose={() => setConfirmDelete(false)}
         style={{ width: '400px' }}
       >
         <div style={{ padding: '1rem' }}>
-          <MessageStrip design="Negative" hideCloseButton>
-            This will permanently delete the interface and all its receivers. This cannot be undone.
+          <MessageStrip design="Critical" hideCloseButton>
+            This interface will be hidden from all views. It is not deleted — it can be restored later if needed.
           </MessageStrip>
         </div>
         <Bar slot="footer">
           <div slot="endContent" style={{ display: 'flex', gap: '0.5rem' }}>
             <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
             <Button design="Negative" disabled={saving} onClick={del}>
-              {saving ? 'Deleting…' : 'Delete'}
+              {saving ? 'Archiving…' : 'Archive'}
             </Button>
           </div>
         </Bar>
@@ -492,7 +492,9 @@ function ReceiverRow({
           <span style={{ color: 'var(--sapContent_LabelColor)', fontSize: '0.72rem' }}>{rec.transport}</span>
         )}
         <Button design="Transparent" onClick={() => setEditing(true)}>Edit</Button>
-        <Button design="Transparent" icon="decline" onClick={onDelete} />
+        <Button design="Transparent" icon="decline" onClick={() => {
+          if (window.confirm('Archive this receiver? It will be hidden but can be restored.')) onDelete()
+        }} />
       </div>
       {rec.via?.length > 0 && (
         <div style={{ fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)', marginTop: '2px' }}>
@@ -526,7 +528,7 @@ function DetailPanel({ iface, api, onClose }: {
           api={api}
           onSave={async body => { await api.updateInterface(iface.id, body); setEditing(false) }}
           onCancel={() => setEditing(false)}
-          onDelete={async () => { await api.deleteInterface(iface.id); onClose() }}
+          onDelete={async () => { await api.archiveInterface(iface.id); onClose() }}
         />
       </Panel>
     )

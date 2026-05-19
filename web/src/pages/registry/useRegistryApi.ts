@@ -188,6 +188,11 @@ export function useRegistryApi() {
     setInterfaces(prev => prev.filter(i => i.id !== id))
   }, [])
 
+  const archiveInterface = useCallback(async (id: string) => {
+    await fetch(`${BASE}/interfaces/${id}/archive`, { method: 'POST' })
+    setInterfaces(prev => prev.filter(i => i.id !== id))
+  }, [])
+
   // ── Receivers ─────────────────────────────────────────────────────────────────
 
   const addReceiver = useCallback(async (ifaceId: string, body: Partial<Receiver>) => {
@@ -263,7 +268,7 @@ export function useRegistryApi() {
     load, loadDiagram, saveConfig,
     createSystem, updateSystem, updateSystemPos, deleteSystem,
     createLogicalGroup, updateLogicalGroup, deleteLogicalGroup,
-    createInterface, updateInterface, deleteInterface,
+    createInterface, updateInterface, deleteInterface, archiveInterface,
     addReceiver, updateReceiver, deleteReceiver,
     listDependencies, addDependency, deleteDependency,
   }

@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react'
 import type { Component, InterfaceV2, ReceiverV2, StatusConfig } from './types_v2'
 import { DEFAULT_STATUSES } from './types_v2'
-import type { System, LogicalGroup, SystemTypeConfig, InfraTypeConfig } from './types'
+import type { System, LogicalGroup, SystemTypeConfig, InfraTypeConfig, DiagramEdge } from './types'
+import type { DiagramFilter } from './useRegistryApi'
 
 const BASE    = '/api/interfaces'
 const BASE_V2 = '/api/interfaces/v2'
@@ -15,18 +16,28 @@ async function checkOk(res: Response): Promise<void> {
 
 export interface ComponentTypeConfig { name: string; color: string }
 
+export interface ManagedByConfig    { name: string; color: string }
+export interface DeploymentTypeConfig { name: string }
+export interface OwnerTypeConfig    { name: string }
+
 export interface RegistryConfigV2 {
-  systemTypes:    SystemTypeConfig[]
-  infraTypes:     InfraTypeConfig[]
-  componentTypes: ComponentTypeConfig[]
-  statuses:       StatusConfig[]
+  systemTypes:     SystemTypeConfig[]
+  infraTypes:      InfraTypeConfig[]
+  componentTypes:  ComponentTypeConfig[]
+  statuses:        StatusConfig[]
+  managedByTypes:  ManagedByConfig[]
+  deploymentTypes: DeploymentTypeConfig[]
+  ownerTypes:      OwnerTypeConfig[]
 }
 
 const DEFAULT_CONFIG_V2: RegistryConfigV2 = {
-  systemTypes:    [{ name: 'Custom', color: 'var(--sapNeutralColor)' }],
-  infraTypes:     [{ name: 'On-Prem', category: 'on_prem' }],
-  componentTypes: [{ name: 'SAP Integration Suite', color: 'var(--sapHighlightColor)' }],
-  statuses:       DEFAULT_STATUSES,
+  systemTypes:     [{ name: 'Custom', color: 'var(--sapNeutralColor)' }],
+  infraTypes:      [{ name: 'On-Prem', category: 'on_prem' }],
+  componentTypes:  [{ name: 'SAP Integration Suite', color: 'var(--sapHighlightColor)' }],
+  statuses:        DEFAULT_STATUSES,
+  managedByTypes:  [{ name: 'Customer', color: '#2E7D32' }],
+  deploymentTypes: [{ name: 'On-Premises' }],
+  ownerTypes:      [{ name: 'IT Shared Services' }],
 }
 
 export function useRegistryApiV2() {
@@ -42,7 +53,7 @@ export function useRegistryApiV2() {
     setLoading(true); setError('')
     const arch = includeArchived ? '?include_archived=true' : ''
     try {
-      const [sRes, gRes, cRes, iRes, stRes, itRes, ctRes, statRes] = await Promise.all([
+      const [sRes, gRes, cRes, iRes, stRes, itRes, ctRes, statRes, mbRes, dtRes, otRes] = await Promise.all([
         fetch(`${BASE}/systems`),
         fetch(`${BASE}/logical-groups`),
         fetch(`${BASE_V2}/components${arch}`),
@@ -51,16 +62,28 @@ export function useRegistryApiV2() {
         fetch(`${BASE}/config/infra_types`),
         fetch(`${BASE}/config/component_types`),
         fetch(`${BASE}/config/statuses`),
+        fetch(`${BASE}/config/managed_by_types`),
+        fetch(`${BASE}/config/deployment_types`),
+        fetch(`${BASE}/config/owner_types`),
       ])
-      const [s, g, c, i, st, it, ct, stat] = await Promise.all([
+      const [s, g, c, i, st, it, ct, stat, mb, dt, ot] = await Promise.all([
         sRes.json(), gRes.json(), cRes.json(), iRes.json(),
         stRes.json(), itRes.json(), ctRes.json(), statRes.json(),
+        mbRes.ok ? mbRes.json() : DEFAULT_CONFIG_V2.managedByTypes,
+        dtRes.ok ? dtRes.json() : DEFAULT_CONFIG_V2.deploymentTypes,
+        otRes.ok ? otRes.json() : DEFAULT_CONFIG_V2.ownerTypes,
       ])
       setSystems(s as System[])
       setLogicalGroups(g as LogicalGroup[])
       setComponents(c as Component[])
       setInterfaces(i as InterfaceV2[])
-      setConfig({ systemTypes: st, infraTypes: it, componentTypes: ct, statuses: Array.isArray(stat) ? stat : DEFAULT_STATUSES })
+      setConfig({
+        systemTypes: st, infraTypes: it, componentTypes: ct,
+        statuses: Array.isArray(stat) ? stat : DEFAULT_STATUSES,
+        managedByTypes:  Array.isArray(mb) ? mb : DEFAULT_CONFIG_V2.managedByTypes,
+        deploymentTypes: Array.isArray(dt) ? dt : DEFAULT_CONFIG_V2.deploymentTypes,
+        ownerTypes:      Array.isArray(ot) ? ot : DEFAULT_CONFIG_V2.ownerTypes,
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
@@ -176,11 +199,44 @@ export function useRegistryApiV2() {
     ))
   }, [])
 
+  const archiveReceiver = useCallback(async (ifaceId: string, rid: string) => {
+    const res = await fetch(`${BASE_V2}/interfaces/${ifaceId}/receivers/${rid}/archive`, { method: 'POST' })
+    await checkOk(res)
+    setInterfaces(prev => prev.map(i =>
+      i.id === ifaceId
+        ? { ...i, receivers: i.receivers.filter(r => r.id !== rid) }
+        : i
+    ))
+  }, [])
+
+  const loadDiagramV2 = useCallback(async (filter: DiagramFilter) => {
+    const p = new URLSearchParams()
+    if (filter.systemIds.length)        p.set('system_ids',        filter.systemIds.join(','))
+    if (filter.infraTypes.length)       p.set('infra_types',       filter.infraTypes.join(','))
+    if (filter.statuses.length)         p.set('statuses',          filter.statuses.join(','))
+    if (filter.functionalDomain.length) p.set('functional_domain', filter.functionalDomain.join(','))
+    if (!filter.strict)                 p.set('strict', '0')
+    const res = await fetch(`${BASE_V2}/diagram?${p}`)
+    if (!res.ok) throw new Error('Failed to load diagram')
+    return res.json() as Promise<{ systems: System[]; edges: DiagramEdge[] }>
+  }, [])
+
+  const updateSystemPos = useCallback(async (id: string, x: number, y: number) => {
+    const sys = systems.find(s => s.id === id)
+    if (!sys) return
+    await fetch(`${BASE}/systems/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...sys, pos_x: x, pos_y: y }),
+    })
+    setSystems(prev => prev.map(s => s.id === id ? { ...s, pos_x: x, pos_y: y } : s))
+  }, [systems])
+
   return {
     systems, logicalGroups, components, interfaces, config, loading, error,
     load,
     createComponent, updateComponent, archiveComponent,
     createInterface, updateInterface, archiveInterface, unarchiveInterface,
-    addReceiver, updateReceiver, deleteReceiver,
+    addReceiver, updateReceiver, deleteReceiver, archiveReceiver,
+    loadDiagramV2, updateSystemPos,
   }
 }

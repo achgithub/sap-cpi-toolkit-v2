@@ -121,9 +121,9 @@ function InterfaceDialog({ open, editId, initial, api, onClose }: {
     finally { setSaving(false) }
   }
 
-  const needsTriggerSystem    = form.trigger_type === 'system_push'
+  const needsTriggerSystem    = form.trigger_type === 'system_push' || form.trigger_type === 'system_scheduled'
   const needsTriggerComponent = form.trigger_type === 'component_scheduled' || form.trigger_type === 'component_event'
-  const needsSchedule         = form.trigger_type === 'component_scheduled'
+  const needsSchedule         = form.trigger_type === 'component_scheduled' || form.trigger_type === 'system_scheduled'
   const needsSource           = form.trigger_type === 'component_scheduled' || form.trigger_type === 'component_event'
   const isPublishedApi        = form.interface_type === 'published_api'
 
@@ -341,7 +341,11 @@ function ReceiverPanel({ iface, api }: { iface: InterfaceV2; api: ReturnType<typ
                 </div>
               </div>
               <Button design="Transparent" icon="edit" onClick={() => openEdit(r)} />
-              <Button design="Transparent" icon="delete" onClick={() => api.deleteReceiver(iface.id, r.id)} />
+              <Button design="Transparent" icon="delete" onClick={() => {
+                if (window.confirm('Archive this receiver? It will be hidden but can be restored.')) {
+                  api.archiveReceiver(iface.id, r.id)
+                }
+              }} />
             </div>
 
             {/* Additional component hops on this receiver leg */}

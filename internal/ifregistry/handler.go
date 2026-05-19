@@ -37,7 +37,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /interfaces",        h.createInterface)
 	mux.HandleFunc("GET /interfaces/{id}",    h.getInterface)
 	mux.HandleFunc("PUT /interfaces/{id}",    h.updateInterface)
-	mux.HandleFunc("DELETE /interfaces/{id}", h.deleteInterface)
+	mux.HandleFunc("DELETE /interfaces/{id}",         h.deleteInterface)
+	mux.HandleFunc("POST /interfaces/{id}/archive",   h.archiveInterface)
 
 	// Receivers
 	mux.HandleFunc("POST /interfaces/{id}/receivers",         h.addReceiver)
@@ -56,7 +57,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /logical-groups/{id}/flow-diagram", h.putGroupFlowDiagram)
 
 	// Architecture diagram
-	mux.HandleFunc("GET /diagram", h.getDiagram)
+	mux.HandleFunc("GET /diagram",    h.getDiagram)
+	mux.HandleFunc("GET /v2/diagram", h.getDiagramV2)
 
 	// Registry config
 	mux.HandleFunc("GET /config/{key}", h.getConfig)
@@ -83,6 +85,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v2/interfaces/{id}/receivers",         h.addReceiverV2)
 	mux.HandleFunc("PUT /v2/interfaces/{id}/receivers/{rid}",    h.updateReceiverV2)
 	mux.HandleFunc("DELETE /v2/interfaces/{id}/receivers/{rid}", h.deleteReceiverV2)
+	mux.HandleFunc("POST /v2/interfaces/{id}/receivers/{rid}/archive", h.archiveReceiverV2)
 
 	// Dependencies v2
 	mux.HandleFunc("GET /v2/interfaces/{id}/dependencies",          h.listDependenciesV2)
@@ -104,6 +107,11 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// Flow diagram v2
 	mux.HandleFunc("GET /v2/interfaces/{id}/flow-diagram", h.getInterfaceV2FlowDiagram)
 	mux.HandleFunc("PUT /v2/interfaces/{id}/flow-diagram", h.putInterfaceV2FlowDiagram)
+
+	// Architecture saved views
+	mux.HandleFunc("GET /v2/architecture-views",        h.listArchViews)
+	mux.HandleFunc("POST /v2/architecture-views",       h.createArchView)
+	mux.HandleFunc("DELETE /v2/architecture-views/{id}", h.deleteArchView)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

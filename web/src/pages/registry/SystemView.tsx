@@ -136,9 +136,12 @@ export default function SystemView() {
             <div style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {/* Metadata */}
               {[
-                ['Type',   selected.system_type],
-                ['Infra',  [selected.infra_type, selected.infra_region].filter(Boolean).join(' · ')],
-                ['Owner',  selected.owner_type],
+                ['Type',        selected.system_type],
+                ['Infra',       [selected.infra_type, selected.infra_region].filter(Boolean).join(' · ')],
+                ['Owner',       selected.owner_type],
+                ['Managed By',  selected.managed_by],
+                ['Deployment',  selected.deployment_type],
+                ['Biz Owner',   selected.owner],
                 ...(selected.description ? [['Description', selected.description]] : []),
               ].map(([label, value]) => (
                 <div key={label} style={{ display: 'flex', gap: 8, fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem' }}>

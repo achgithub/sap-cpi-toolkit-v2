@@ -1,13 +1,16 @@
 export interface System {
-  id:          string
-  name:        string
-  system_type: string
-  infra_type:  string
-  infra_region: string
-  description: string
-  owner_type:  string
-  pos_x:       number
-  pos_y:       number
+  id:              string
+  name:            string
+  system_type:     string
+  infra_type:      string
+  infra_region:    string
+  description:     string
+  owner_type:      string
+  managed_by:      string
+  deployment_type: string
+  owner:           string
+  pos_x:           number
+  pos_y:           number
 }
 
 export interface LogicalGroup {

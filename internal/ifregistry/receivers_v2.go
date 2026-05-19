@@ -114,6 +114,22 @@ func (h *Handler) deleteReceiverV2(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 
+func (h *Handler) archiveReceiverV2(w http.ResponseWriter, r *http.Request) {
+	rid := r.PathValue("rid")
+	res, err := h.pool.Exec(r.Context(),
+		`UPDATE interface_receivers_v2 SET archived_at=now() WHERE id=$1 AND archived_at IS NULL`, rid)
+	if err != nil {
+		h.log.Error("archive receiver v2", "error", err)
+		apiError(w, 500, "internal error")
+		return
+	}
+	if res.RowsAffected() == 0 {
+		apiError(w, 404, "not found")
+		return
+	}
+	w.WriteHeader(204)
+}
+
 func (h *Handler) attachReceiversV2(r *http.Request, ifaces []InterfaceV2) error {
 	if len(ifaces) == 0 {
 		return nil
@@ -126,7 +142,7 @@ func (h *Handler) attachReceiversV2(r *http.Request, ifaces []InterfaceV2) error
 	}
 	rows, err := h.pool.Query(r.Context(),
 		`SELECT `+recvV2Cols+` FROM interface_receivers_v2
-		 WHERE interface_id = ANY($1::uuid[]) ORDER BY created_at`, ids)
+		 WHERE interface_id = ANY($1::uuid[]) AND archived_at IS NULL ORDER BY created_at`, ids)
 	if err != nil {
 		return err
 	}

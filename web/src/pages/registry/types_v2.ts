@@ -98,8 +98,8 @@ export const STATUSES_V2: StatusV2[] = DEFAULT_STATUSES.map(s => s.name)
 export type InterfaceTypeV2 = 'point_to_point' | 'broadcast' | 'shared_library' | 'utility' | 'published_api'
 export const INTERFACE_TYPES_V2: InterfaceTypeV2[] = ['point_to_point', 'broadcast', 'shared_library', 'utility', 'published_api']
 
-export type TriggerType = 'system_push' | 'component_scheduled' | 'component_event' | 'api_inbound'
-export const TRIGGER_TYPES: TriggerType[] = ['system_push', 'component_scheduled', 'component_event', 'api_inbound']
+export type TriggerType = 'system_push' | 'system_scheduled' | 'component_scheduled' | 'component_event' | 'api_inbound'
+export const TRIGGER_TYPES: TriggerType[] = ['system_push', 'system_scheduled', 'component_scheduled', 'component_event', 'api_inbound']
 
 export type InteractionPattern = 'sync' | 'async' | 'event' | 'scheduled'
 export const INTERACTION_PATTERNS: InteractionPattern[] = ['sync', 'async', 'event', 'scheduled']
@@ -116,6 +116,7 @@ export function getStatusColor(status: string, statuses: StatusConfig[]): string
 
 export const TRIGGER_LABELS: Record<TriggerType, string> = {
   system_push:         'System Push',
+  system_scheduled:    'Scheduled (System)',
   component_scheduled: 'Scheduled (Component)',
   component_event:     'Event (Component)',
   api_inbound:         'API Inbound',
@@ -139,6 +140,7 @@ export const TYPE_LABELS_V2: Record<InterfaceTypeV2, string> = {
 // Suggested interaction_pattern given a trigger_type
 export const SUGGESTED_PATTERN: Record<TriggerType, InteractionPattern> = {
   system_push:         'async',
+  system_scheduled:    'sync',
   component_scheduled: 'scheduled',
   component_event:     'event',
   api_inbound:         'sync',

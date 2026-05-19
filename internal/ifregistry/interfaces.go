@@ -101,6 +101,7 @@ func (h *Handler) listInterfaces(w http.ResponseWriter, r *http.Request) {
 
 	// Optional filters via query params
 	var conditions []string
+	conditions = append(conditions, "archived_at IS NULL")
 	var args []any
 	idx := 1
 
@@ -313,6 +314,22 @@ func (h *Handler) deleteInterface(w http.ResponseWriter, r *http.Request) {
 	res, err := h.pool.Exec(r.Context(), `DELETE FROM interfaces WHERE id=$1`, id)
 	if err != nil {
 		h.log.Error("delete interface", "error", err)
+		apiError(w, 500, "internal error")
+		return
+	}
+	if res.RowsAffected() == 0 {
+		apiError(w, 404, "not found")
+		return
+	}
+	w.WriteHeader(204)
+}
+
+func (h *Handler) archiveInterface(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	res, err := h.pool.Exec(r.Context(),
+		`UPDATE interfaces SET archived_at=now() WHERE id=$1 AND archived_at IS NULL`, id)
+	if err != nil {
+		h.log.Error("archive interface", "error", err)
 		apiError(w, 500, "internal error")
 		return
 	}

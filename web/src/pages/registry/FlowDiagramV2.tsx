@@ -80,24 +80,41 @@ function buildV2State(
 
   if (iface.trigger_type === 'component_scheduled' || iface.trigger_type === 'component_event') {
     const comp = components.find(c => c.id === iface.trigger_component_id)
-    const schedNote = iface.schedule_expression ? `\n${iface.schedule_expression}` : ''
     const trigNode: FlowNode = {
       id: flowUid(), type: 'hop',
-      label: (comp?.name ?? 'Trigger Component') + schedNote,
+      label: comp?.name ?? 'Trigger Component',
       x, y: snap(topY + (sysH - hopH) / 2), width: hopW, height: hopH,
       color: FLOW_DEFAULTS.hop.color, fontSize: FLOW_DEFAULTS.hop.fs,
       nodeKey: 'trigger-component',
     }
     nodes.push(trigNode)
 
-    // Bidirectional edge: trigger component initiates, source returns data
-    const trigLabel = iface.trigger_type === 'component_scheduled' ? 'trigger / fetch' : 'trigger / event'
+    // Two parallel arrows between source system and trigger component:
+    // 1. Dashed blue: CPI → source (the poll/trigger request), offset upward
+    // 2. Solid async:  source → CPI (data flows back), offset downward
+    const OFF = 10
+    const trigLabel = iface.schedule_expression ?? (iface.trigger_type === 'component_event' ? 'event' : '')
+    edges.push({
+      id: flowUid(),
+      fromNodeId: trigNode.id, toNodeId: leftNode.id,
+      path: [
+        { x: lc(trigNode).x, y: lc(trigNode).y - OFF },
+        { x: rc(leftNode).x, y: rc(leftNode).y - OFF },
+      ],
+      label: trigLabel,
+      arrow: 'end',
+      dashed: true,
+      color: '#1565C0',
+    })
     edges.push({
       id: flowUid(),
       fromNodeId: leftNode.id, toNodeId: trigNode.id,
-      path: [rc(leftNode), lc(trigNode)],
-      label: trigLabel,
-      arrow: 'both',
+      path: [
+        { x: rc(leftNode).x, y: rc(leftNode).y + OFF },
+        { x: lc(trigNode).x, y: lc(trigNode).y + OFF },
+      ],
+      label: '',
+      arrow: 'end',
     })
     prevNode = trigNode
     x += hopW + gap
@@ -118,13 +135,14 @@ function buildV2State(
     }
     nodes.push(hopNode)
 
-    // Edge from previous node — label interaction pattern on first hop edge
-    const isFirst = vi === 0 && iface.trigger_type !== 'component_scheduled' && iface.trigger_type !== 'component_event'
+    // For system_scheduled: first edge carries the schedule expression as a label
+    const hopLabel = (vi === 0 && iface.trigger_type === 'system_scheduled')
+      ? (iface.schedule_expression ?? '') : ''
     edges.push({
       id: flowUid(),
       fromNodeId: prevNode.id, toNodeId: hopNode.id,
       path: [rc(prevNode), lc(hopNode)],
-      label: isFirst ? PATTERN_LABELS[iface.interaction_pattern] : '',
+      label: hopLabel,
       arrow: iface.interaction_pattern === 'sync' ? 'both' : 'end',
     })
 
@@ -180,9 +198,6 @@ function buildV2State(
     }
 
     const recvSys = systems.find(s => s.id === recv.system_id)
-    const noViaLabel = iface.via.length === 0 && ri === 0
-      ? PATTERN_LABELS[iface.interaction_pattern] : ''
-
     const recvNode: FlowNode = {
       id: flowUid(), type: 'system',
       label: recvSys?.name ?? 'Receiver',
@@ -191,12 +206,14 @@ function buildV2State(
       nodeKey: `recv-${ri}`,
     }
     nodes.push(recvNode)
+    const recvLabel = (iface.via.length === 0 && ri === 0 && iface.trigger_type === 'system_scheduled')
+      ? (iface.schedule_expression ?? '') : ''
     edges.push({
       id: flowUid(),
       fromNodeId: branchNode.id, toNodeId: recvNode.id,
       path: [rc(branchNode), lc(recvNode)],
-      label: noViaLabel || (iface.receivers.length > 1 ? `leg ${ri + 1}` : ''),
-      arrow: iface.interaction_pattern === 'sync' && iface.via.length === 0 ? 'both' : 'end',
+      label: recvLabel,
+      arrow: iface.interaction_pattern === 'sync' ? 'both' : 'end',
     })
 
     recvY += sysH + gap
@@ -275,9 +292,24 @@ export default function FlowDiagramV2() {
 
   function reseed() {
     if (!selId) return
-    if (!window.confirm('Regenerate layout from interface data? Positions will reset.')) return
+    if (!window.confirm('Regenerate layout from interface data? Node positions will reset but steps will be preserved.')) return
     const iface = api.interfaces.find(i => i.id === selId)
-    if (iface) setState(buildV2State(iface, api.systems, api.components))
+    if (!iface) return
+    // Preserve steps keyed by "nodeKey:label" — compound key distinguishes multiple
+    // instances of the same system/platform appearing in the same diagram
+    const stepsMap = new Map<string, NonNullable<FlowNode['steps']>>()
+    for (const node of (state?.nodes ?? [])) {
+      if (node.nodeKey && node.steps?.length)
+        stepsMap.set(`${node.nodeKey}:${node.label}`, node.steps)
+    }
+    const fresh = buildV2State(iface, api.systems, api.components)
+    if (stepsMap.size > 0) {
+      fresh.nodes = fresh.nodes.map(n => {
+        const steps = n.nodeKey ? stepsMap.get(`${n.nodeKey}:${n.label}`) : undefined
+        return steps?.length ? { ...n, steps } : n
+      })
+    }
+    setState(fresh)
   }
 
   const selectedIface = selId ? api.interfaces.find(i => i.id === selId) : null

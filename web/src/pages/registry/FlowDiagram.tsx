@@ -199,16 +199,16 @@ export default function FlowDiagram({ initialIfaceId, onBack }: { initialIfaceId
     const iface = api.interfaces.find(i => i.id === selId)
     if (!iface) return
 
-    // Preserve steps from current nodes, keyed by nodeKey
+    // Preserve steps keyed by "nodeKey:label" — compound key handles multiple instances of the same system
     const stepsMap = new Map<string, NonNullable<FlowNode['steps']>>()
     for (const node of (state?.nodes ?? [])) {
-      if (node.nodeKey && node.steps?.length) stepsMap.set(node.nodeKey, node.steps)
+      if (node.nodeKey && node.steps?.length) stepsMap.set(`${node.nodeKey}:${node.label}`, node.steps)
     }
 
     const fresh = buildInterfaceState(iface, api.systems)
     if (stepsMap.size > 0) {
       fresh.nodes = fresh.nodes.map(n => {
-        const steps = n.nodeKey ? stepsMap.get(n.nodeKey) : undefined
+        const steps = n.nodeKey ? stepsMap.get(`${n.nodeKey}:${n.label}`) : undefined
         return steps?.length ? { ...n, steps } : n
       })
     }

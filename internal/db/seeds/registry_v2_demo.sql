@@ -17,7 +17,6 @@ DO $$
 DECLARE
   -- Integration component IDs
   cpi_prd   UUID;
-  cpi_dev   UUID;
   sftp_gw   UUID;
   mulesoft  UUID;
   event_bus UUID;
@@ -44,15 +43,11 @@ BEGIN
 -- ── Integration Components ────────────────────────────────────────────────────
 
 INSERT INTO integration_components (name, component_type, infra_type, infra_region, description)
-VALUES ('SAP CPI PRD', 'SAP Integration Suite', 'SAP BTP', 'EU10', 'Production SAP Cloud Integration tenant')
+VALUES ('SAP CPI', 'SAP Integration Suite', 'SAP BTP', 'EU10', 'Production SAP Cloud Integration tenant')
 RETURNING id INTO cpi_prd;
 
 INSERT INTO integration_components (name, component_type, infra_type, infra_region, description)
-VALUES ('SAP CPI DEV', 'SAP Integration Suite', 'SAP BTP', 'EU10', 'Development SAP Cloud Integration tenant')
-RETURNING id INTO cpi_dev;
-
-INSERT INTO integration_components (name, component_type, infra_type, infra_region, description)
-VALUES ('SFTP Gateway PRD', 'SFTP', 'On-Prem', 'Frankfurt DC', 'On-premise SFTP server for file-based exchanges')
+VALUES ('SFTP Gateway', 'SFTP', 'On-Prem', 'Frankfurt DC', 'On-premise SFTP server for file-based exchanges')
 RETURNING id INTO sftp_gw;
 
 INSERT INTO integration_components (name, component_type, infra_type, infra_region, description)
@@ -95,7 +90,7 @@ INSERT INTO interfaces_v2 (
   grp_s4_sf, 1,
   'system_push', 'ea7e3874-c359-4185-b5b2-4395890bf273', 'async',
   jsonb_build_array(
-    jsonb_build_object('type','component','component_id',cpi_prd,'label','SAP CPI PRD')
+    jsonb_build_object('type','component','component_id',cpi_prd,'label','SAP CPI')
   )
 ) RETURNING id INTO if_cust_create;
 
@@ -116,7 +111,7 @@ INSERT INTO interfaces_v2 (
   grp_s4_sf, 2,
   'system_push', 'ea7e3874-c359-4185-b5b2-4395890bf273', 'async',
   jsonb_build_array(
-    jsonb_build_object('type','component','component_id',cpi_prd,'label','SAP CPI PRD')
+    jsonb_build_object('type','component','component_id',cpi_prd,'label','SAP CPI')
   )
 ) RETURNING id INTO if_cust_update;
 
@@ -158,7 +153,7 @@ INSERT INTO interfaces_v2 (
   grp_s4_sf, 4,
   'system_push', 'cc0a5519-1701-40a3-9b33-4dd8d1b06e34', 'sync',
   jsonb_build_array(
-    jsonb_build_object('type','component','component_id',cpi_prd,'label','SAP CPI PRD')
+    jsonb_build_object('type','component','component_id',cpi_prd,'label','SAP CPI')
   )
 ) RETURNING id INTO if_opp_to_order;
 
@@ -181,8 +176,7 @@ INSERT INTO interfaces_v2 (
   'component_scheduled', cpi_prd, 'ea7e3874-c359-4185-b5b2-4395890bf273',
   'Twice daily — 06:00 and 18:00 UTC', 'scheduled',
   jsonb_build_array(
-    jsonb_build_object('type','component','component_id',cpi_prd,'label','SAP CPI PRD'),
-    jsonb_build_object('type','component','component_id',sftp_gw,'label','SFTP Gateway PRD')
+    jsonb_build_object('type','component','component_id',sftp_gw,'label','SFTP Gateway')
   )
 ) RETURNING id INTO if_pricing_sync;
 
@@ -252,7 +246,7 @@ INSERT INTO interfaces_v2 (
   NULL, NULL,
   'system_push', 'ea7e3874-c359-4185-b5b2-4395890bf273', 'async',
   jsonb_build_array(
-    jsonb_build_object('type','component','component_id',cpi_prd,'label','SAP CPI PRD')
+    jsonb_build_object('type','component','component_id',cpi_prd,'label','SAP CPI')
   )
 ) RETURNING id INTO if_po_broadcast;
 
@@ -267,7 +261,7 @@ VALUES (
   '59dd5044-b525-404e-a694-ff9b708b73e7',
   'HTTP', 'APIKey', 'supplier-portal-key',
   jsonb_build_array(
-    jsonb_build_object('type','component','component_id',sftp_gw,'label','SFTP Gateway PRD'),
+    jsonb_build_object('type','component','component_id',sftp_gw,'label','SFTP Gateway'),
     jsonb_build_object('type','component','component_id',mulesoft,'label','MuleSoft EU Runtime')
   )
 );
@@ -290,8 +284,7 @@ INSERT INTO interfaces_v2 (
   'component_event', event_bus, 'ea7e3874-c359-4185-b5b2-4395890bf273',
   'event',
   jsonb_build_array(
-    jsonb_build_object('type','component','component_id',event_bus,'label','BTP Event Mesh'),
-    jsonb_build_object('type','component','component_id',cpi_prd,'label','SAP CPI PRD')
+    jsonb_build_object('type','component','component_id',cpi_prd,'label','SAP CPI')
   )
 ) RETURNING id INTO if_sn_event;
 
@@ -336,18 +329,16 @@ INSERT INTO interfaces_v2 (
   'Human Resources',
   'Nightly full extract of Workday organisational hierarchy. CPI transforms Workday supervisory organisations into S/4 cost centres and organisational units. Currently in UAT — go-live planned after HR cutover.',
   grp_hr, 2,
-  'component_scheduled', cpi_dev, '7eac2147-76b2-4757-b8a0-50380ece8d97',
+  'component_scheduled', cpi_prd, '7eac2147-76b2-4757-b8a0-50380ece8d97',
   'Nightly 00:30 UTC', 'scheduled',
-  jsonb_build_array(
-    jsonb_build_object('type','component','component_id',cpi_dev,'label','SAP CPI DEV')
-  )
+  '[]'
 ) RETURNING id INTO if_workday_org;
 
 INSERT INTO interface_receivers_v2 (interface_id, system_id, transport, auth_type, credential_alias, via)
 VALUES (if_workday_org, 'ea7e3874-c359-4185-b5b2-4395890bf273', 'HTTP', 'OAuth2', 's4-cpi-oauth', '[]');
 
 RAISE NOTICE 'Registry V2 demo seed complete.';
-RAISE NOTICE 'Components: %, %, %, %, %, %', cpi_prd, cpi_dev, sftp_gw, mulesoft, event_bus, mdg_api;
+RAISE NOTICE 'Components: %, %, %, %, %', cpi_prd, sftp_gw, mulesoft, event_bus, mdg_api;
 RAISE NOTICE 'Interfaces: 10 created across 4 functional domains.';
 
 END $$;

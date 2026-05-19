@@ -38,6 +38,8 @@ export interface FlowEdge {
   path: { x: number; y: number }[]   // full path: [start, ...waypoints, end]
   label: string
   arrow: 'end' | 'none' | 'both'
+  dashed?: boolean   // trigger edges use dashed stroke
+  color?: string     // override stroke + arrowhead color
 }
 
 export interface FlowDiagramState {
@@ -84,9 +86,13 @@ function hitTest(n: FlowNode, pt: { x: number; y: number }): boolean {
 type Tool = 'select' | 'system' | 'hop' | 'step' | 'text' | 'boundary' | 'line'
 type ResizeDir = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 
+type Pt = { x: number; y: number }
+
 type DragState =
   | { kind: 'pan';      ox: number; oy: number; sx: number; sy: number }
-  | { kind: 'node';     id: string; ox: number; oy: number; sx: number; sy: number; nw: number; nh: number; isBoundary: boolean }
+  | { kind: 'node';     id: string; ox: number; oy: number; sx: number; sy: number; nw: number; nh: number; isBoundary: boolean
+      // snapshot of connected edge endpoints at drag-start, so offsets are preserved during move
+      initFrom: Record<string, Pt>; initTo: Record<string, Pt> }
   | { kind: 'resize';   id: string; ox: number; oy: number; ow: number; oh: number; sx: number; sy: number; dir: ResizeDir }
   | { kind: 'waypoint'; eid: string; idx: number; sx: number; sy: number }
   | { kind: 'drawline'; fromId: string }
@@ -619,7 +625,14 @@ export default function FlowCanvas({ initialState, onSave, onReseed, saving = fa
     }
 
     setSelected({ kind: 'node', id: nodeId }); setEditing(null)
-    setDrag({ kind: 'node', id: nodeId, ox: node.x, oy: node.y, sx: e.clientX, sy: e.clientY, nw: node.width, nh: node.height, isBoundary: node.type === 'boundary' })
+    // Capture edge endpoints now so offsets (e.g. parallel arrows) are preserved during drag
+    const initFrom: Record<string, Pt> = {}
+    const initTo:   Record<string, Pt> = {}
+    edgesRef.current.forEach(edge => {
+      if (edge.fromNodeId === nodeId) initFrom[edge.id] = { ...edge.path[0] }
+      if (edge.toNodeId   === nodeId) initTo[edge.id]   = { ...edge.path[edge.path.length - 1] }
+    })
+    setDrag({ kind: 'node', id: nodeId, ox: node.x, oy: node.y, sx: e.clientX, sy: e.clientY, nw: node.width, nh: node.height, isBoundary: node.type === 'boundary', initFrom, initTo })
   }
 
   // ── Resize mousedown ──────────────────────────────────────────────────────
@@ -655,15 +668,18 @@ export default function FlowCanvas({ initialState, onSave, onReseed, saving = fa
       const cX = nx + drag.nw / 2
       const cY = ny + drag.nh / 2
 
+      // Translate edge endpoints by the same delta the node moved, preserving any path offsets
+      const ddx = cX - (drag.ox + drag.nw / 2)
+      const ddy = cY - (drag.oy + drag.nh / 2)
       setNodes(ns => ns.map(n => n.id !== drag.id ? n : { ...n, x: nx, y: ny }))
       setEdges(es => es.map(edge => {
-        if (edge.fromNodeId === drag.id) {
-          const p = [...edge.path]; p[0] = { x: cX, y: cY }; return { ...edge, path: p }
-        }
-        if (edge.toNodeId === drag.id) {
-          const p = [...edge.path]; p[p.length - 1] = { x: cX, y: cY }; return { ...edge, path: p }
-        }
-        return edge
+        const hasFrom = drag.initFrom[edge.id] != null
+        const hasTo   = drag.initTo[edge.id]   != null
+        if (!hasFrom && !hasTo) return edge
+        const p = [...edge.path]
+        if (hasFrom) p[0]           = { x: drag.initFrom[edge.id].x + ddx, y: drag.initFrom[edge.id].y + ddy }
+        if (hasTo)   p[p.length-1]  = { x: drag.initTo[edge.id].x   + ddx, y: drag.initTo[edge.id].y   + ddy }
+        return { ...edge, path: p }
       }))
       return
     }
@@ -844,13 +860,31 @@ export default function FlowCanvas({ initialState, onSave, onReseed, saving = fa
               <marker id="fd-arr-start" markerWidth="8" markerHeight="8" refX="1" refY="3" orient="auto-start-reverse">
                 <path d="M0,0 L0,6 L8,3 z" fill="#333" />
               </marker>
+              <marker id="fd-arr-end-accent" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#1565C0" />
+              </marker>
+              <marker id="fd-arr-start-accent" markerWidth="8" markerHeight="8" refX="1" refY="3" orient="auto-start-reverse">
+                <path d="M0,0 L0,6 L8,3 z" fill="#1565C0" />
+              </marker>
             </defs>
 
             {edges.map(edge => {
-              const isSel = selected?.kind === 'edge' && selected.id === edge.id
-              const pts = edge.path.map(p => `${p.x},${p.y}`).join(' ')
-              const mEnd   = edge.arrow !== 'none'  ? 'url(#fd-arr-end)'   : undefined
-              const mStart = edge.arrow === 'both'  ? 'url(#fd-arr-start)' : undefined
+              const isSel  = selected?.kind === 'edge' && selected.id === edge.id
+              const accent = !!edge.color
+              const stroke = isSel ? '#0070F2' : (edge.color ?? '#2c3e50')
+              const dash   = edge.dashed ? '7 4' : (isSel ? '5 3' : undefined)
+              const mEnd   = accent ? 'url(#fd-arr-end-accent)' : 'url(#fd-arr-end)'
+
+              // For 'both': draw two offset polylines each with a single forward arrowhead.
+              // This avoids the markerStart-behind-node visibility problem.
+              const OFF = 5
+              const fwdPts = edge.arrow === 'both'
+                ? edge.path.map(p => `${p.x},${p.y - OFF}`).join(' ')
+                : edge.path.map(p => `${p.x},${p.y}`).join(' ')
+              const revPts = edge.arrow === 'both'
+                ? [...edge.path].reverse().map(p => `${p.x},${p.y + OFF}`).join(' ')
+                : ''
+              const hitPts = edge.path.map(p => `${p.x},${p.y}`).join(' ')
 
               let lx = 0, ly = 0, hasLabel = false
               if (edge.label && edge.path.length >= 2) {
@@ -862,17 +896,25 @@ export default function FlowCanvas({ initialState, onSave, onReseed, saving = fa
               return (
                 <g key={edge.id}>
                   {/* Wide invisible hit target */}
-                  <polyline points={pts} stroke="transparent" strokeWidth={12} fill="none"
+                  <polyline points={hitPts} stroke="transparent" strokeWidth={12} fill="none"
                     style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
                     onClick={() => { setSelected({ kind: 'edge', id: edge.id }); setTool('select') }} />
-                  {/* Visible line */}
-                  <polyline points={pts}
-                    stroke={isSel ? '#0070F2' : '#2c3e50'} strokeWidth={isSel ? 2 : 1.5}
-                    fill="none" markerEnd={mEnd} markerStart={mStart}
-                    strokeDasharray={isSel ? '5 3' : undefined} />
+                  {/* Forward arrow */}
+                  <polyline points={fwdPts}
+                    stroke={stroke} strokeWidth={isSel ? 2 : 1.5}
+                    fill="none"
+                    markerEnd={edge.arrow !== 'none' ? mEnd : undefined}
+                    strokeDasharray={dash} />
+                  {/* Reverse arrow (only for 'both') */}
+                  {edge.arrow === 'both' && (
+                    <polyline points={revPts}
+                      stroke={stroke} strokeWidth={isSel ? 2 : 1.5}
+                      fill="none" markerEnd={mEnd}
+                      strokeDasharray={dash} />
+                  )}
                   {hasLabel && (
-                    <text x={lx} y={ly - 5} textAnchor="middle" fontSize={11}
-                      fill="#555" fontFamily="var(--sapFontFamily)">{edge.label}</text>
+                    <text x={lx} y={ly - 6} textAnchor="middle" fontSize={11}
+                      fill={edge.color ?? '#555'} fontFamily="var(--sapFontFamily)">{edge.label}</text>
                   )}
                 </g>
               )

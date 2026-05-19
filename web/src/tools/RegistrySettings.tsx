@@ -47,17 +47,22 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
 type SystemForm = {
   name: string; description: string
   system_type: string; infra_type: string; infra_region: string; owner_type: string
+  managed_by: string; deployment_type: string; owner: string
 }
 
 const emptySysForm = (): SystemForm => ({
   name: '', description: '', system_type: '', infra_type: '', infra_region: '', owner_type: 'internal',
+  managed_by: '', deployment_type: '', owner: '',
 })
 
 function SystemEditor() {
-  const [systems,    setSystems]    = useState<System[]>([])
-  const [sysTypes,   setSysTypes]   = useState<SystemTypeConfig[]>([])
-  const [infraTypes, setInfraTypes] = useState<InfraTypeConfig[]>([])
-  const [form,       setForm]       = useState<SystemForm>(emptySysForm())
+  const [systems,         setSystems]         = useState<System[]>([])
+  const [sysTypes,        setSysTypes]        = useState<SystemTypeConfig[]>([])
+  const [infraTypes,      setInfraTypes]      = useState<InfraTypeConfig[]>([])
+  const [managedByTypes,  setManagedByTypes]  = useState<{name:string;color:string}[]>([])
+  const [deploymentTypes, setDeploymentTypes] = useState<{name:string}[]>([])
+  const [ownerTypes,      setOwnerTypes]      = useState<{name:string}[]>([])
+  const [form,            setForm]            = useState<SystemForm>(emptySysForm())
   const [editId,     setEditId]     = useState<string | null>(null)
   const [dlgOpen,    setDlgOpen]    = useState(false)
   const [saving,     setSaving]     = useState(false)
@@ -69,6 +74,9 @@ function SystemEditor() {
     ).catch(() => {})
     fetch(`${CFG_BASE}/system_types`).then(r => r.json()).then(setSysTypes).catch(() => {})
     fetch(`${CFG_BASE}/infra_types`).then(r => r.json()).then(setInfraTypes).catch(() => {})
+    fetch(`${CFG_BASE}/managed_by_types`).then(r => r.ok ? r.json() : []).then(setManagedByTypes).catch(() => {})
+    fetch(`${CFG_BASE}/deployment_types`).then(r => r.ok ? r.json() : []).then(setDeploymentTypes).catch(() => {})
+    fetch(`${CFG_BASE}/owner_types`).then(r => r.ok ? r.json() : []).then(setOwnerTypes).catch(() => {})
   }, [])
 
   function openCreate() {
@@ -77,7 +85,7 @@ function SystemEditor() {
 
   function openEdit(s: System) {
     setEditId(s.id)
-    setForm({ name: s.name, description: s.description, system_type: s.system_type, infra_type: s.infra_type, infra_region: s.infra_region, owner_type: s.owner_type || 'internal' })
+    setForm({ name: s.name, description: s.description, system_type: s.system_type, infra_type: s.infra_type, infra_region: s.infra_region, owner_type: s.owner_type || 'internal', managed_by: s.managed_by || '', deployment_type: s.deployment_type || '', owner: s.owner || '' })
     setError(''); setDlgOpen(true)
   }
 
@@ -173,11 +181,31 @@ function SystemEditor() {
               <Input value={form.infra_region} placeholder="e.g. eu-west-1" onInput={e => setForm(p => ({ ...p, infra_region: (e.target as unknown as HTMLInputElement).value }))} />
             </FormField>
           </div>
-          <FormField label="Owner">
+          <FormField label="Owner (internal/partner/external)">
             <select value={form.owner_type} onChange={f('owner_type')} style={{ ...nativeSelect, width: '100%' }}>
               <option value="internal">Internal</option>
               <option value="partner">Partner</option>
               <option value="external">External</option>
+            </select>
+          </FormField>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <FormField label="Managed By">
+              <select value={form.managed_by} onChange={f('managed_by')} style={{ ...nativeSelect, width: '100%' }}>
+                <option value="">— unknown —</option>
+                {managedByTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+              </select>
+            </FormField>
+            <FormField label="Deployment Type">
+              <select value={form.deployment_type} onChange={f('deployment_type')} style={{ ...nativeSelect, width: '100%' }}>
+                <option value="">— unknown —</option>
+                {deploymentTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+              </select>
+            </FormField>
+          </div>
+          <FormField label="Business Owner">
+            <select value={form.owner} onChange={f('owner')} style={{ ...nativeSelect, width: '100%' }}>
+              <option value="">— unassigned —</option>
+              {ownerTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
             </select>
           </FormField>
         </div>
@@ -725,6 +753,118 @@ function StatusEditor() {
   )
 }
 
+// ── Simple name-only picklist editor (reused for deployment types + owner types) ──
+
+function NameListEditor({ title, configKey }: { title: string; configKey: string }) {
+  const [items,    setItems]    = useState<{name:string}[]>([])
+  const [editIdx,  setEditIdx]  = useState<number | null>(null)
+  const [editName, setEditName] = useState('')
+  const [newName,  setNewName]  = useState('')
+  const [saving,   setSaving]   = useState(false)
+  const [error,    setError]    = useState('')
+
+  useEffect(() => { fetch(`${CFG_BASE}/${configKey}`).then(r => r.ok ? r.json() : []).then(setItems).catch(() => {}) }, [configKey])
+
+  async function save(updated: {name:string}[]) {
+    setSaving(true); setError('')
+    try {
+      const res = await fetch(`${CFG_BASE}/${configKey}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) })
+      if (!res.ok) throw new Error('Save failed')
+      setItems(updated)
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Section title={title}>
+      {error && <MessageStrip design="Negative" hideCloseButton>{error}</MessageStrip>}
+      {items.map((item, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', borderBottom: '1px solid var(--sapList_BorderColor)' }}>
+          {editIdx === i ? (
+            <>
+              <Input value={editName} onInput={e => setEditName((e.target as unknown as HTMLInputElement).value)} style={{ flex: 1, fontSize: '0.8rem' }} />
+              <Button design="Transparent" icon="accept" onClick={() => { if (editName.trim()) save(items.map((x,j) => j===i?{name:editName.trim()}:x)); setEditIdx(null) }} disabled={saving} />
+              <Button design="Transparent" icon="decline" onClick={() => setEditIdx(null)} />
+            </>
+          ) : (
+            <>
+              <span style={{ flex: 1, fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapTextColor)' }}>{item.name}</span>
+              <Button design="Transparent" icon="edit" onClick={() => { setEditIdx(i); setEditName(item.name) }} />
+              <Button design="Transparent" icon="delete" onClick={() => save(items.filter((_,j) => j!==i))} />
+            </>
+          )}
+        </div>
+      ))}
+      <div style={{ paddingTop: 8, display: 'flex', gap: 6 }}>
+        <Input placeholder="Add new…" value={newName} onInput={e => setNewName((e.target as unknown as HTMLInputElement).value)} style={{ flex: 1 }} />
+        <Button design="Emphasized" onClick={() => { if (!newName.trim()) return; save([...items, {name:newName.trim()}]); setNewName('') }} disabled={saving || !newName.trim()}>Add</Button>
+      </div>
+    </Section>
+  )
+}
+
+// ── Managed By editor (name + colour) ────────────────────────────────────────
+
+function ManagedByEditor() {
+  const [items,    setItems]    = useState<{name:string;color:string}[]>([])
+  const [editIdx,  setEditIdx]  = useState<number | null>(null)
+  const [editName, setEditName] = useState('')
+  const [newName,  setNewName]  = useState('')
+  const [newColor, setNewColor] = useState('#78909C')
+  const [saving,   setSaving]   = useState(false)
+  const [error,    setError]    = useState('')
+
+  useEffect(() => { fetch(`${CFG_BASE}/managed_by_types`).then(r => r.ok ? r.json() : []).then(setItems).catch(() => {}) }, [])
+
+  async function save(updated: {name:string;color:string}[]) {
+    setSaving(true); setError('')
+    try {
+      const res = await fetch(`${CFG_BASE}/managed_by_types`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) })
+      if (!res.ok) throw new Error('Save failed')
+      setItems(updated)
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Section title="Managed By (Infrastructure View grouping)">
+      {error && <MessageStrip design="Negative" hideCloseButton>{error}</MessageStrip>}
+      {items.map((item, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', borderBottom: '1px solid var(--sapList_BorderColor)' }}>
+          <input type="color" value={item.color}
+            onChange={e => save(items.map((x,j) => j===i ? {...x, color: e.target.value} : x))}
+            style={{ width: 26, height: 26, border: 'none', padding: 0, cursor: 'pointer', borderRadius: 3, flexShrink: 0 }} />
+          {editIdx === i ? (
+            <>
+              <Input value={editName} onInput={e => setEditName((e.target as unknown as HTMLInputElement).value)} style={{ flex: 1, fontSize: '0.8rem' }} />
+              <Button design="Transparent" icon="accept" onClick={() => { if (editName.trim()) save(items.map((x,j) => j===i?{...x,name:editName.trim()}:x)); setEditIdx(null) }} disabled={saving} />
+              <Button design="Transparent" icon="decline" onClick={() => setEditIdx(null)} />
+            </>
+          ) : (
+            <>
+              <span style={{ flex: 1, fontFamily: 'var(--sapFontFamily)', fontSize: '0.8rem', color: 'var(--sapTextColor)' }}>{item.name}</span>
+              <Button design="Transparent" icon="edit" onClick={() => { setEditIdx(i); setEditName(item.name) }} />
+              <Button design="Transparent" icon="delete" onClick={() => save(items.filter((_,j) => j!==i))} />
+            </>
+          )}
+        </div>
+      ))}
+      <div style={{ paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {PRESET_COLORS.map(c => (
+            <button key={c} onClick={() => setNewColor(c)} style={{ width: 18, height: 18, borderRadius: 3, background: c, border: newColor===c ? '2px solid var(--sapTextColor)' : '1px solid transparent', cursor: 'pointer', padding: 0 }} />
+          ))}
+          <input type="color" value={newColor} onChange={e => setNewColor(e.target.value)} style={{ width: 26, height: 26, border: 'none', padding: 0, cursor: 'pointer', borderRadius: 3 }} />
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <Input placeholder="Provider name e.g. SAP" value={newName} onInput={e => setNewName((e.target as unknown as HTMLInputElement).value)} style={{ flex: 1 }} />
+          <Button design="Emphasized" onClick={() => { if (!newName.trim()) return; save([...items, {name:newName.trim(),color:newColor}]); setNewName(''); setNewColor('#78909C') }} disabled={saving || !newName.trim()}>Add</Button>
+        </div>
+      </div>
+    </Section>
+  )
+}
+
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function RegistrySettings() {
@@ -734,6 +874,9 @@ export default function RegistrySettings() {
       <SystemEditor />
       <SystemTypeEditor />
       <InfraTypeEditor />
+      <ManagedByEditor />
+      <NameListEditor title="Deployment Types" configKey="deployment_types" />
+      <NameListEditor title="Business Owners" configKey="owner_types" />
       <ComponentTypeEditor />
       <IntegrationComponentEditor />
       <PlatformEditor />
