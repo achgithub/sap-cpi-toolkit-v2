@@ -221,14 +221,12 @@ export function useRegistryApiV2() {
   }, [])
 
   const updateSystemPos = useCallback(async (id: string, x: number, y: number) => {
-    const sys = systems.find(s => s.id === id)
-    if (!sys) return
-    await fetch(`${BASE}/systems/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...sys, pos_x: x, pos_y: y }),
+    await fetch(`${BASE}/systems/${id}/pos`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pos_x: x, pos_y: y }),
     })
     setSystems(prev => prev.map(s => s.id === id ? { ...s, pos_x: x, pos_y: y } : s))
-  }, [systems])
+  }, [])
 
   return {
     systems, logicalGroups, components, interfaces, config, loading, error,

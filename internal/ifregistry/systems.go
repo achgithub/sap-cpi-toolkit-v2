@@ -145,6 +145,27 @@ func (h *Handler) updateSystem(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, 200, s)
 }
 
+func (h *Handler) updateSystemPos(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		PosX float64 `json:"pos_x"`
+		PosY float64 `json:"pos_y"`
+	}
+	if err := decode(r, &body); err != nil {
+		apiError(w, 400, "invalid body")
+		return
+	}
+	_, err := h.pool.Exec(r.Context(),
+		`UPDATE systems SET pos_x=$1, pos_y=$2, updated_at=now() WHERE id=$3 AND archived_at IS NULL`,
+		body.PosX, body.PosY, id)
+	if err != nil {
+		h.log.Error("update system pos", "error", err)
+		apiError(w, 500, "internal error")
+		return
+	}
+	w.WriteHeader(204)
+}
+
 func (h *Handler) archiveSystem(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	res, err := h.pool.Exec(r.Context(),

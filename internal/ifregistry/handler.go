@@ -23,6 +23,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /systems",                  h.listSystems)
 	mux.HandleFunc("POST /systems",                 h.createSystem)
 	mux.HandleFunc("PUT /systems/{id}",             h.updateSystem)
+	mux.HandleFunc("PATCH /systems/{id}/pos",       h.updateSystemPos)
 	mux.HandleFunc("POST /systems/{id}/archive",    h.archiveSystem)
 	mux.HandleFunc("POST /systems/{id}/unarchive",  h.unarchiveSystem)
 
