@@ -350,21 +350,19 @@ export default function ArchitectureFiltersV2({ systems, filter, onChange, statu
                 background: 'var(--sapField_Background)', color: 'var(--sapTextColor)',
               }}
             />
-            <input
-              value={viewOwner}
-              onChange={e => setViewOwner(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Escape') { setSaving(false); setViewName(''); setViewOwner('') } }}
-              placeholder="Owner…"
-              style={{
-                fontFamily: 'var(--sapFontFamily)', fontSize: '0.72rem',
-                border: '1px solid var(--sapList_BorderColor)', borderRadius: '4px',
-                padding: '2px 6px', width: 90,
-                background: 'var(--sapField_Background)', color: 'var(--sapTextColor)',
-              }}
-            />
+            {/* Filter summary — warn if saving with no filters active */}
+            {activeCount === 0 ? (
+              <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.68rem', color: 'var(--sapWarningColor)', whiteSpace: 'nowrap' }}>
+                No filters set — will save as "show all"
+              </span>
+            ) : (
+              <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.68rem', color: 'var(--sapPositiveColor)', whiteSpace: 'nowrap' }}>
+                {activeCount} filter{activeCount > 1 ? 's' : ''} will be saved
+              </span>
+            )}
             {views.some(v => v.name === viewName.trim()) && (
               <span style={{ fontFamily: 'var(--sapFontFamily)', fontSize: '0.68rem', color: 'var(--sapWarningColor)', whiteSpace: 'nowrap' }}>
-                Will overwrite existing view
+                · will overwrite existing
               </span>
             )}
             <button onClick={confirmSave} disabled={!viewName.trim()}
@@ -374,7 +372,7 @@ export default function ArchitectureFiltersV2({ systems, filter, onChange, statu
             <button onClick={() => { setSaving(false); setViewName(''); setViewOwner('') }} style={base}>✕</button>
           </div>
         ) : (
-          <button onClick={() => setSaving(true)} style={base} title="Save current filters as a named view">
+          <button onClick={() => setSaving(true)} style={base} title="Save current filter selection as a named view">
             + Save view
           </button>
         )}
