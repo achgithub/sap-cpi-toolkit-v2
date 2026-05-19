@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useRegistryApiV2 } from './useRegistryApiV2'
-import type { DiagramFilter } from './useRegistryApi'
+import type { DiagramFilter } from './types'
 import type { System, DiagramEdge, RegistryConfig } from './types'
 import ArchitectureFiltersV2   from './ArchitectureFiltersV2'
 import ArchitectureCanvasV2    from './ArchitectureCanvasV2'

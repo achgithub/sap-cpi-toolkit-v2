@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Input } from '@ui5/webcomponents-react'
-import { useRegistryApi } from './useRegistryApi'
+import { useRegistryApiV2 } from './useRegistryApiV2'
 import { getSystemColor } from './types'
 
 export default function SystemView() {
-  const api = useRegistryApi()
+  const api = useRegistryApiV2()
   const [search,     setSearch]     = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
@@ -13,9 +13,10 @@ export default function SystemView() {
   const ifaceCounts = useMemo(() => {
     const counts: Record<string, { sends: number; receives: number }> = {}
     api.interfaces.forEach(i => {
-      if (i.sender_system_id) {
-        counts[i.sender_system_id] ??= { sends: 0, receives: 0 }
-        counts[i.sender_system_id].sends++
+      const srcId = i.trigger_system_id ?? i.source_system_id
+      if (srcId) {
+        counts[srcId] ??= { sends: 0, receives: 0 }
+        counts[srcId].sends++
       }
       i.receivers.forEach(r => {
         if (r.system_id) {
@@ -120,7 +121,7 @@ export default function SystemView() {
       {selected && (() => {
         const counts = ifaceCounts[selected.id] ?? { sends: 0, receives: 0 }
         const color  = getSystemColor(selected.system_type, api.config)
-        const sends  = api.interfaces.filter(i => i.sender_system_id === selected.id)
+        const sends  = api.interfaces.filter(i => (i.trigger_system_id ?? i.source_system_id) === selected.id)
         const recvs  = api.interfaces.filter(i => i.receivers.some(r => r.system_id === selected.id))
         return (
           <div style={{ width: 340, flexShrink: 0, borderLeft: '1px solid var(--sapList_BorderColor)', background: 'var(--sapGroup_ContentBackground)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

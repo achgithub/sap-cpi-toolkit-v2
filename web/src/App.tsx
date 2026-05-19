@@ -207,7 +207,7 @@ export default function App() {
       <ToolDialog {...tdProps} id="cloud-connector"    title="Cloud Connector"                  defaultWidth="80vw"  defaultHeight="90vh"><CloudConnector /></ToolDialog>
       <ToolDialog {...tdProps} id="edi"                title="EDI Tools"                        defaultWidth="90vw"  defaultHeight="90vh"><EDITools /></ToolDialog>
       <ToolDialog {...tdProps} id="adapter-templates"  title="Adapter Templates — Global Library" defaultWidth="90vw" defaultHeight="90vh"><GlobalAdapterTemplates /></ToolDialog>
-      <ToolDialog {...tdProps} id="registry-settings"  title="Registry Settings"                defaultWidth="600px" defaultHeight="80vh"><RegistrySettings /></ToolDialog>
+      <ToolDialog {...tdProps} id="registry-settings"  title="Registry Settings"                defaultWidth="80vw"  defaultHeight="88vh"><RegistrySettings /></ToolDialog>
       <ToolDialog {...tdProps} id="mock-server"        title="HTTP Mock Server"                 defaultWidth="90vw"  defaultHeight="90vh"><MockServer /></ToolDialog>
       <ToolDialog {...tdProps} id="comparator"        title="Comparator"                       defaultWidth="96vw"  defaultHeight="94vh"><Comparator /></ToolDialog>
 

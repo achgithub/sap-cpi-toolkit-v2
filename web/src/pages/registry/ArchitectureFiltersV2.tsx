@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { System } from './types'
-import type { DiagramFilter } from './useRegistryApi'
+import type { DiagramFilter } from './types'
 import type { StatusConfig } from './types_v2'
 
 interface Props {

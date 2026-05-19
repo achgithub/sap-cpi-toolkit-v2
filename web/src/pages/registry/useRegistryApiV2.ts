@@ -1,8 +1,7 @@
 import { useState, useCallback } from 'react'
 import type { Component, InterfaceV2, ReceiverV2, StatusConfig } from './types_v2'
 import { DEFAULT_STATUSES } from './types_v2'
-import type { System, LogicalGroup, SystemTypeConfig, InfraTypeConfig, DiagramEdge } from './types'
-import type { DiagramFilter } from './useRegistryApi'
+import type { System, LogicalGroup, SystemTypeConfig, InfraTypeConfig, DiagramEdge, DiagramFilter } from './types'
 
 const BASE    = '/api/interfaces'
 const BASE_V2 = '/api/interfaces/v2'

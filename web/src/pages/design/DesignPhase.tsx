@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { emptyFilter, type DiagramFilter } from '../registry/useRegistryApi'
+import { emptyFilter, type DiagramFilter } from '../registry/types'
 import {
   Button, Dialog, Bar, Input, Label, MessageStrip,
   FlexBox, FlexBoxJustifyContent,
@@ -8,14 +8,10 @@ import PhaseLayout from '../../components/PhaseLayout'
 import { useWorkspace, type Project } from '../../context/WorkspaceContext'
 import ProjectSetup from './ProjectSetup'
 import ProjectAdapterTemplates from '../../tools/ProjectAdapterTemplates'
-import ArchitectureView   from '../registry/ArchitectureView'
 import ArchitectureViewV2 from '../registry/ArchitectureViewV2'
-import RegistryGrid from '../registry/RegistryGrid'
-import RegistryGridV2 from '../registry/RegistryGridV2'
-import FlowDiagramV2  from '../registry/FlowDiagramV2'
-import SystemView from '../registry/SystemView'
-import FlowDiagram from '../registry/FlowDiagram'
-import GroupDiagramSvg   from '../registry/GroupDiagramSvg'
+import RegistryGridV2    from '../registry/RegistryGridV2'
+import FlowDiagramV2     from '../registry/FlowDiagramV2'
+import SystemView        from '../registry/SystemView'
 import GroupDiagramSvgV2 from '../registry/GroupDiagramSvgV2'
 
 interface ProjectForm { name: string; description: string }
@@ -173,17 +169,13 @@ function ProjectsSection() {
 // ── Design phase shell with sub-nav ──────────────────────────────────────────
 
 const DESIGN_NAV = [
-  { id: 'projects',      label: 'Projects',      icon: 'business-objects-experience' },
-  { id: 'templates',     label: 'Templates',     icon: 'wrench'                      },
-  { id: 'architecture',  label: 'Architecture',  icon: 'org-chart'                   },
-  { id: 'flow',          label: 'Flow Diagram',  icon: 'process'                     },
-  { id: 'group',         label: 'Group Diagram', icon: 'group'                       },
-  { id: 'registry',      label: 'Registry',      icon: 'detail-view'                 },
-  { id: 'systems',       label: 'Systems',       icon: 'it-system'                   },
-  { id: 'registry-v2',      label: 'Registry V2 ⚒',      icon: 'lab'       },
-  { id: 'flow-v2',          label: 'Flow V2 ⚒',          icon: 'process'   },
-  { id: 'architecture-v2',  label: 'Architecture V2 ⚒',  icon: 'org-chart' },
-  { id: 'group-v2',         label: 'Group Diagram V2 ⚒', icon: 'group'     },
+  { id: 'projects',     label: 'Projects',      icon: 'business-objects-experience' },
+  { id: 'templates',    label: 'Templates',     icon: 'wrench'                      },
+  { id: 'architecture', label: 'Architecture',  icon: 'org-chart'                   },
+  { id: 'flow',         label: 'Flow Diagram',  icon: 'process'                     },
+  { id: 'group',        label: 'Group Diagram', icon: 'group'                       },
+  { id: 'registry',     label: 'Registry',      icon: 'detail-view'                 },
+  { id: 'systems',      label: 'Systems',       icon: 'it-system'                   },
 ]
 
 function PhasePlaceholder({ title, description }: { title: string; description: string }) {
@@ -224,25 +216,17 @@ function TemplatesSection() {
 
 
 export default function DesignPhase() {
-  const [archFilter,     setArchFilter]     = useState<DiagramFilter>(emptyFilter())
-  const [registryFilter, setRegistryFilter] = useState<{ sender?: string; receiver?: string }>({})
-  const [fromArch,       setFromArch]       = useState(false)
+  const [archFilter,   setArchFilter]   = useState<DiagramFilter>(emptyFilter())
+  const [fromArch,     setFromArch]     = useState(false)
   const [fromGroupReg,   setFromGroupReg]   = useState(false)
   const [regIfaceId,     setRegIfaceId]     = useState<string | undefined>(undefined)
   const [flowIfaceId,    setFlowIfaceId]    = useState<string | undefined>(undefined)
   const [fromGroup,      setFromGroup]      = useState(false)
   const [fromGroupId,    setFromGroupId]    = useState<string | undefined>(undefined)
-  // V2 group diagram navigation state
-  const [fromGroupV2,    setFromGroupV2]    = useState(false)
-  const [fromGroupIdV2,  setFromGroupIdV2]  = useState<string | undefined>(undefined)
-  const [regIfaceIdV2,   setRegIfaceIdV2]   = useState<string | undefined>(undefined)
-  const [fromGroupRegV2, setFromGroupRegV2] = useState(false)
 
   function onTabChange(id: string) {
-    if (id !== 'registry')    { setFromArch(false); setFromGroupReg(false); setRegIfaceId(undefined) }
-    if (id !== 'flow')        { setFromGroup(false) }
-    if (id !== 'flow-v2')     { setFromGroupV2(false) }
-    if (id !== 'registry-v2') { setFromGroupRegV2(false); setRegIfaceIdV2(undefined) }
+    if (id !== 'registry') { setFromArch(false); setFromGroupReg(false); setRegIfaceId(undefined) }
+    if (id !== 'flow')     { setFromGroup(false) }
   }
 
   return (
@@ -252,35 +236,23 @@ export default function DesignPhase() {
           {id === 'projects'     && <ProjectsSection />}
           {id === 'templates'    && <TemplatesSection />}
           {id === 'architecture' && (
-            <ArchitectureView
+            <ArchitectureViewV2
               filter={archFilter}
               onFilterChange={setArchFilter}
-              onOpenRegistry={(sender, receiver) => {
-                setRegistryFilter({ sender, receiver })
+              onOpenRegistry={(_sender, _receiver) => {
                 setFromArch(true)
                 setId('registry')
               }}
             />
           )}
-          {id === 'architecture-v2' && (
-            <ArchitectureViewV2
-              filter={archFilter}
-              onFilterChange={setArchFilter}
-              onOpenRegistry={(sender, receiver) => {
-                setRegistryFilter({ sender, receiver })
-                setFromArch(true)
-                setId('registry-v2')
-              }}
-            />
-          )}
-          {id === 'flow'  && (
-            <FlowDiagram
-              initialIfaceId={flowIfaceId}
+          {id === 'flow' && (
+            <FlowDiagramV2
+              initialIfaceId={fromGroup ? flowIfaceId : undefined}
               onBack={fromGroup ? () => { setFromGroup(false); setId('group') } : undefined}
             />
           )}
           {id === 'group' && (
-            <GroupDiagramSvg
+            <GroupDiagramSvgV2
               initialGroupId={fromGroupId}
               onOpenFlowDiagram={(ifaceId, groupId) => {
                 setFlowIfaceId(ifaceId)
@@ -297,49 +269,17 @@ export default function DesignPhase() {
             />
           )}
           {id === 'registry' && (
-            <RegistryGrid
-              key={`${registryFilter.sender ?? ''}-${registryFilter.receiver ?? ''}-${regIfaceId ?? ''}`}
-              initialSenderSystemId={registryFilter.sender}
-              initialReceiverSystemId={registryFilter.receiver}
+            <RegistryGridV2
+              key={regIfaceId ?? ''}
               initialIfaceId={regIfaceId}
               onBack={
-                fromArch    ? () => { setFromArch(false);    setId('architecture') } :
+                fromArch     ? () => { setFromArch(false);                              setId('architecture') } :
                 fromGroupReg ? () => { setFromGroupReg(false); setRegIfaceId(undefined); setId('group') } :
                 undefined
               }
             />
           )}
-          {id === 'systems'     && <SystemView />}
-          {id === 'registry-v2' && (
-            <RegistryGridV2
-              key={`${regIfaceIdV2 ?? ''}`}
-              initialIfaceId={regIfaceIdV2}
-              onBack={fromGroupRegV2 ? () => { setFromGroupRegV2(false); setRegIfaceIdV2(undefined); setId('group-v2') } : undefined}
-            />
-          )}
-          {id === 'flow-v2' && (
-            <FlowDiagramV2
-              initialIfaceId={fromGroupV2 ? flowIfaceId : undefined}
-              onBack={fromGroupV2 ? () => { setFromGroupV2(false); setId('group-v2') } : undefined}
-            />
-          )}
-          {id === 'group-v2' && (
-            <GroupDiagramSvgV2
-              initialGroupId={fromGroupIdV2}
-              onOpenFlowDiagram={(ifaceId, groupId) => {
-                setFlowIfaceId(ifaceId)
-                setFromGroupIdV2(groupId)
-                setFromGroupV2(true)
-                setId('flow-v2')
-              }}
-              onOpenRegistry={(ifaceId, groupId) => {
-                setRegIfaceIdV2(ifaceId)
-                setFromGroupIdV2(groupId)
-                setFromGroupRegV2(true)
-                setId('registry-v2')
-              }}
-            />
-          )}
+          {id === 'systems' && <SystemView />}
         </>
       )}
     </PhaseLayout>

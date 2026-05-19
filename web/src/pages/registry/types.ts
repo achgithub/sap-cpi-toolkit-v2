@@ -105,6 +105,20 @@ export const TYPE_LABELS: Record<string, string> = {
 
 export const DEFAULT_SYSTEM_COLOR = '#78909C'
 
-export function getSystemColor(systemType: string, config: RegistryConfig): string {
+export function getSystemColor(systemType: string, config: RegistryConfig | { systemTypes: SystemTypeConfig[] }): string {
   return config.systemTypes.find(t => t.name === systemType)?.color ?? DEFAULT_SYSTEM_COLOR
 }
+
+export interface DiagramFilter {
+  systemIds:         string[]
+  infraTypes:        string[]
+  statuses:          string[]
+  functionalDomain:  string[]
+  deliveryProjectId: string
+  strict:            boolean
+}
+
+export const emptyFilter = (): DiagramFilter => ({
+  systemIds: [], infraTypes: [], statuses: [],
+  functionalDomain: [], deliveryProjectId: '', strict: true,
+})
