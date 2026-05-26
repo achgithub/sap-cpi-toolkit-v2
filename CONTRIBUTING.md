@@ -2,6 +2,12 @@
 
 Thank you for your interest in contributing. This document covers how to get the development environment running, the branching and PR workflow, and the code standards we apply.
 
+## Where to Start
+
+Browse the [open issues](https://github.com/achgithub/sap-cpi-toolkit-v2/issues) on GitHub. Issues labelled [`good first issue`](https://github.com/achgithub/sap-cpi-toolkit-v2/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) are scoped and self-contained — a good place to get familiar with the codebase. Issues labelled [`help wanted`](https://github.com/achgithub/sap-cpi-toolkit-v2/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) are open for anyone to pick up.
+
+If you want to work on something, comment on the issue so we can avoid duplicated effort.
+
 ## Getting Started
 
 ### Prerequisites
