@@ -28,6 +28,28 @@ const SAP_LOGO_URL = '/sap-logo.svg'
 
 type Phase = 'design' | 'develop' | 'test' | 'monitoring'
 
+const COMING_SOON = new Set<Phase>(['design', 'monitoring'])
+
+function HoldingPage({ phase }: { phase: Phase }) {
+  const label = phase.charAt(0).toUpperCase() + phase.slice(1)
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', height: '100%', gap: '1rem',
+      color: 'var(--sapTextColor)',
+    }}>
+      <span style={{ fontSize: '3rem', opacity: 0.25 }}>&#9749;</span>
+      <h2 style={{ margin: 0, fontWeight: 600, fontSize: '1.25rem' }}>
+        {label} — Coming Soon
+      </h2>
+      <p style={{ margin: 0, color: 'var(--sapNeutralColor)', fontSize: '0.9rem', textAlign: 'center', maxWidth: 380 }}>
+        This section is under active development and will be available in a future release.
+        The Develop and Test phases are fully functional in the meantime.
+      </p>
+    </div>
+  )
+}
+
 // ── ToolDialog ────────────────────────────────────────────────────────────────
 // Shared wrapper for all Toolbox tool overlays. Extracted to eliminate 12
 // near-identical Dialog blocks and fix the shared-maximized-state bug
@@ -153,25 +175,31 @@ export default function App() {
         padding: '0 1rem',
         flexShrink: 0,
       }}>
-        {(['design', 'develop', 'test', 'monitoring'] as Phase[]).map(p => (
-          <div key={p} style={{
-            borderBottom: phase === p ? '2px solid var(--sapHighlightColor)' : '2px solid transparent',
-            marginBottom: '-2px',
-            display: 'flex',
-          }}>
-            <Button
-              design="Transparent"
-              onClick={() => setPhase(p)}
-              style={{
-                borderRadius: 0,
-                fontWeight: phase === p ? 600 : 400,
-                color: phase === p ? 'var(--sapHighlightColor)' : 'var(--sapTextColor)',
-              } as React.CSSProperties}
-            >
-              {p.charAt(0).toUpperCase() + p.slice(1)}
-            </Button>
-          </div>
-        ))}
+        {(['design', 'develop', 'test', 'monitoring'] as Phase[]).map(p => {
+          const soon = COMING_SOON.has(p)
+          return (
+            <div key={p} style={{
+              borderBottom: phase === p ? '2px solid var(--sapHighlightColor)' : '2px solid transparent',
+              marginBottom: '-2px',
+              display: 'flex',
+              opacity: soon ? 0.45 : 1,
+            }}>
+              <Button
+                design="Transparent"
+                onClick={() => setPhase(p)}
+                style={{
+                  borderRadius: 0,
+                  fontWeight: phase === p ? 600 : 400,
+                  color: soon ? 'var(--sapNeutralColor)' : phase === p ? 'var(--sapHighlightColor)' : 'var(--sapTextColor)',
+                  cursor: soon ? 'default' : 'pointer',
+                } as React.CSSProperties}
+              >
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+                {soon && <span style={{ fontSize: '0.65rem', marginLeft: '0.35rem', verticalAlign: 'middle' }}>●</span>}
+              </Button>
+            </div>
+          )
+        })}
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0' }}>
           <ContextBar />
@@ -185,10 +213,12 @@ export default function App() {
 
       {/* Phase content */}
       <div style={{ flex: 1, overflow: 'auto', background: 'var(--sapBackgroundColor)' }}>
-        {phase === 'design'     && <DesignPhase />}
-        {phase === 'develop'    && <DevelopPhase />}
-        {phase === 'test'       && <TestPhase />}
-        {phase === 'monitoring' && <MonitoringPhase />}
+        {COMING_SOON.has(phase) ? <HoldingPage phase={phase} /> : (
+          <>
+            {phase === 'develop'    && <DevelopPhase />}
+            {phase === 'test'       && <TestPhase />}
+          </>
+        )}
       </div>
 
       <ToolboxPanel

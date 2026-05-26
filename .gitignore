@@ -4,3 +4,7 @@ cmd/portal/static/
 *.env
 !deployments/local/.env.example
 .DS_Store
+
+# Compiled binaries
+sap-cpi-toolkit-v2*
+tsc
